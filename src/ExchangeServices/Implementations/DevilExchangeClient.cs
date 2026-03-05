@@ -17,10 +17,9 @@ public sealed class DevilExchangeClient : IDevilExchangeClient
     /// <summary>Stores the last raw HTTP response from /api/v1/quote for debugging. Thread-safe via volatile.</summary>
     public volatile string? LastQuoteDebug;
 
-    public string  ExchangeKey => "devilexchange";
-    public string  SiteName    => opt.SiteName;
-    public string? SiteUrl     => opt.SiteUrl;
-
+    public string ExchangeKey => "devilexchange";
+    public string SiteName => opt.SiteName;
+    public string? SiteUrl => opt.SiteUrl;
     // /pairs cache
     private readonly object pairsLock = new();
     private DateTimeOffset pairsAtUtc;
@@ -101,7 +100,7 @@ public sealed class DevilExchangeClient : IDevilExchangeClient
         return null;
     }
 
-    // BUY = QUOTE required to get 1 BASE
+    // BUY = QUOTE required to get exactly 1 BASE
     public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
         var snap = await GetPairsSnapshotAsync(ct);
@@ -113,11 +112,34 @@ public sealed class DevilExchangeClient : IDevilExchangeClient
 
         var rateType = NormalizeRateType(opt.RateType);
 
-        // BUY price = QUOTE needed to receive 1 BASE (e.g. USDT needed to get 1 XMR).
-        // Strategy 1: query QUOTE->BASE (e.g. USDT->XMR), get BASE-per-QUOTE rate, invert.
-        //   e.g. USDT->XMR rate = 0.00288 XMR/USDT  =>  buy price = 1/0.00288 = 347 USDT/XMR  ✓
-        // Strategy 2: query BASE->QUOTE (e.g. XMR->USDT), use rate directly as buy price
-        //   (the rate IS how many USDT you get per XMR sent, which approximates the buy price)
+        // ── Primary strategy: amount_side=to ────────────────────────────────
+        // Ask "I want to RECEIVE exactly 1 BASE (XMR). How much QUOTE (USDT) must I send?"
+        // The API returns amount_from = the exact USDT cost — no inversion, no rounding error.
+        //
+        //   GET /api/v1/quote?from=USDTTRC20&to=XMR&amount=1&amount_side=to
+        //   → { "quote": { "amount_to_receive": 1, "amount_to_send": 365.95, "rate": ... } }
+        //                                                         ^^^^^^ this IS the buy price
+        //
+        // Devil also supports amount_to param directly, but amount_side=to with amount=1
+        // is the cleanest single-param override.
+        foreach (var baseSym in baseCands)
+            foreach (var quoteSym in quoteCands)
+            {
+                var cost = await GetBuyPriceDirectAsync(quoteSym, baseSym, rateType, snap, ct);
+                if (cost is not null && cost.Value > 0m)
+                    return new PriceResult(
+                        Exchange: ExchangeKey,
+                        Base: query.Base,
+                        Quote: query.Quote,
+                        Price: cost.Value,
+                        TimestampUtc: DateTimeOffset.UtcNow,
+                        CorrelationId: null,
+                        Raw: null
+                    );
+            }
+
+        // ── Fallback: invert the QUOTE→BASE unit rate ────────────────────────
+        // Only reached if amount_side=to probe fails (e.g. pair not supported that way).
         foreach (var baseSym in baseCands)
             foreach (var quoteSym in quoteCands)
             {
@@ -138,22 +160,43 @@ public sealed class DevilExchangeClient : IDevilExchangeClient
                 }
             }
 
-        // Strategy 2: fallback — use BASE->QUOTE rate directly (same direction as sell)
-        foreach (var baseSym in baseCands)
-            foreach (var quoteSym in quoteCands)
+        return null;
+    }
+
+    /// <summary>
+    /// Asks the API: "I want to receive exactly 1 <paramref name="to"/> (e.g. XMR).
+    /// How much <paramref name="from"/> (e.g. USDT) must I send?"
+    ///
+    /// Uses amount_side=to so the API interprets amount=1 as the TO side.
+    /// Reads AmountFrom from the response — that is the buy price with no inversion.
+    /// Falls back to amount_to= explicit param if amount_side is not honoured.
+    /// </summary>
+    private async Task<decimal?> GetBuyPriceDirectAsync(
+        string from, string to, string rateType, PairsSnapshot snap, CancellationToken ct)
+    {
+        // Probe: receive exactly 1 unit of `to`
+        var q = await GetQuoteAsync(from, to, amount: 1m, rateType: rateType,
+                                    amountSide: "to", ct: ct);
+
+        if (q is not null && q.Success && q.AmountFrom is not null && q.AmountFrom.Value > 0m)
+            return q.AmountFrom.Value;
+
+        // amount_out_of_range on the TO side — try the explicit amount_to= param
+        if (q is not null && q.OutOfRange && q.MinAmount is not null)
+        {
+            // min here is in the TO currency (XMR); pick a valid TO amount then normalise back
+            var toAmt = ChooseAmountInRange(1m, q.MinAmount, q.MaxAmount);
+            var q2 = await GetQuoteAsync(from, to, amount: toAmt, rateType: rateType,
+                                         amountSide: "to", ct: ct);
+
+            if (q2 is not null && q2.Success &&
+                q2.AmountFrom is not null && q2.AmountFrom.Value > 0m &&
+                q2.AmountTo is not null && q2.AmountTo.Value > 0m)
             {
-                var sellRate = await GetUnitRateAsync(baseSym, quoteSym, rateType, snap, ct);
-                if (sellRate is not null && sellRate.Value > 0m)
-                    return new PriceResult(
-                        Exchange: ExchangeKey,
-                        Base: query.Base,
-                        Quote: query.Quote,
-                        Price: sellRate.Value,
-                        TimestampUtc: DateTimeOffset.UtcNow,
-                        CorrelationId: null,
-                        Raw: null
-                    );
+                // normalise back to per-1-unit-of-to
+                return q2.AmountFrom.Value / q2.AmountTo.Value;
             }
+        }
 
         return null;
     }
@@ -361,8 +404,11 @@ public sealed class DevilExchangeClient : IDevilExchangeClient
                     var q2 = await GetQuoteAsync(from, to, amt2, rateType, ct: ct);
                     if (q2 is null || !q2.Success) return null;
 
-                    var r2 = q2.Rate ??
-                             (q2.AmountTo is not null && amt2 > 0m ? q2.AmountTo.Value / amt2 : (decimal?)null);
+                    // Same convention as above — derive from amounts, not q.Rate
+                    var r2 =
+                        (q2.AmountTo is not null && amt2 > 0m)
+                            ? q2.AmountTo.Value / amt2
+                            : q2.Rate;
                     return r2 is not null && r2.Value > 0m ? r2.Value : null;
                 }
             }
@@ -371,9 +417,20 @@ public sealed class DevilExchangeClient : IDevilExchangeClient
             return null;
         }
 
-        // Prefer explicit rate field; derive from amount_to/amount_from if absent
-        var rate = q.Rate ??
-                   (q.AmountTo is not null && amount > 0m ? q.AmountTo.Value / amount : (decimal?)null);
+        // IMPORTANT: Do NOT use q.Rate directly.
+        // Devil.Exchange returns `quote.rate` in a fixed convention (to/from for their
+        // canonical direction, e.g. always ~340 for any XMR/USDT pair regardless of which
+        // side is `from`). For a USDT→XMR probe this gives 340 instead of 0.00294, which
+        // makes GetBuyPriceAsync invert it to 0.003 instead of ~340 — completely wrong.
+        //
+        // Always derive the unit rate from the actual amounts in the response:
+        //   rate = amount_to_receive / amount_sent
+        // This is directionally correct for both XMR→USDT and USDT→XMR.
+        // Fall back to q.Rate only if we have no amounts at all.
+        var rate =
+            (q.AmountTo is not null && amount > 0m)
+                ? q.AmountTo.Value / amount
+                : q.Rate;
 
         return rate is not null && rate.Value > 0m ? rate.Value : null;
     }

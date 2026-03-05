@@ -37,7 +37,7 @@ public static class ServiceCollectionExtensions
         //services.AddXgram(config);
         // services.AddNanswap(config);
 
-        //services.AddDevilExchange(config);
+        services.AddDevilExchange(config);
         // 
 
         //  services.AddOctoSwap(config);

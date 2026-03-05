@@ -25,7 +25,7 @@ properties {
    $databaseProjectSourcePath   = "..\src\CryptoPriceNow.Data"
    $webProjectSourcePath        = "..\src\CryptoPriceNow.Web"
    $testProjectSourcePath       = "..\CryptoPriceNow.slnx"
-   $compileSourcePath           = "..\src\\CryptoPriceNow.Web\bin\output"
+   $compileSourcePath           = "..\src\CryptoPriceNow.Web\bin\output"
 
    $WebAppSettings              = "..\src\CryptoPriceNow.Web\appsettings.json"
    $DatabaseAppSettings         = "..\src\CryptoPriceNow.Data\appsettings.json"

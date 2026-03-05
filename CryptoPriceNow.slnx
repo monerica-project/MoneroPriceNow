@@ -1,4 +1,0 @@
-<Solution>
-  <Project Path="CryptoPriceNow.Web/CryptoPriceNow.Web.csproj" />
-  <Project Path="ExchangeServices/ExchangeServices.csproj" Id="7a456775-67ac-480b-9e21-20134644e0bd" />
-</Solution>
