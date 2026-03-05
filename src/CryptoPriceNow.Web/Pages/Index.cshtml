@@ -385,9 +385,6 @@
   let tableFirstRender = true;
 
   // ── Timer ─────────────────────────────────────────────────────────
-  // refreshAt = exact timestamp when next fetch fires.
-  // setTimeout drives the fetch; setInterval(250) drives the ring.
-  // They never drift apart because refreshAt is the single source of truth.
   let refreshAt  = Date.now() + INTERVAL;
   let refreshTid = null;
 
@@ -459,17 +456,26 @@
     const withSell = rows.filter(r => r.sell !== null && r.sell >= 1);
     const bestBuyRow  = withBuy.length  ? withBuy.reduce( (a,b) => b.buy  < a.buy  ? b : a) : null;
     const bestSellRow = withSell.length ? withSell.reduce((a,b) => b.sell > a.sell ? b : a) : null;
+
     rows.forEach(r => {
       if (r.buy !== null && r.sell !== null && r.buy >= 1 && r.sell >= 1) {
         r.spreadAbs = r.buy - r.sell;
         r.spreadPct = r.spreadAbs >= 0 ? r.spreadAbs / r.buy : Infinity;
-      } else { r.spreadAbs = r.spreadPct = Infinity; }
+      } else {
+        r.spreadAbs = r.spreadPct = Infinity;
+      }
     });
+
+    // Sort by tightest spread first; exchanges with only one price sink to bottom
     rows.sort((a,b) => a.spreadPct !== b.spreadPct ? a.spreadPct - b.spreadPct :
                        a.spreadAbs !== b.spreadAbs ? a.spreadAbs - b.spreadAbs :
                        a.exchange.localeCompare(b.exchange));
+
+    // Drop exchanges where BOTH prices are absent — nothing useful to show
+    const visibleRows = rows.filter(r => r.buy !== null || r.sell !== null);
+
     return {
-      rows, bestBuyRow, bestSellRow,
+      rows: visibleRows, bestBuyRow, bestSellRow,
       bestBuyVal:   withBuy.length  ? Math.min(...withBuy.map(r=>r.buy))   : null,
       worstBuyVal:  withBuy.length  ? Math.max(...withBuy.map(r=>r.buy))   : null,
       bestSellVal:  withSell.length ? Math.max(...withSell.map(r=>r.sell)) : null,
@@ -527,9 +533,18 @@
     }
 
     // ── Subsequent renders: update cells in-place ──
-    // Flash ONLY if the numeric value actually changed.
     const rowMap = new Map();
     bodyEl.querySelectorAll('tr[data-ex]').forEach(tr => rowMap.set(tr.dataset.ex, tr));
+
+    // Remove DOM rows for exchanges that dropped out (both prices now null)
+    const visibleKeys = new Set(rows.map(r => r.exchange.trim().toLowerCase()));
+    rowMap.forEach((tr, key) => {
+      if (!visibleKeys.has(key)) {
+        tr.remove();
+        rowMap.delete(key);
+        prev.delete(key);
+      }
+    });
 
     rows.forEach(r => {
       const key = r.exchange.trim().toLowerCase();
@@ -601,7 +616,7 @@
     }
   }
 
-  // ── Boot: fetch immediately, then schedule repeating refresh ─────
+  // ── Boot ──────────────────────────────────────────────────────────
   refresh().then(scheduleNext);
 })();
 </script>
