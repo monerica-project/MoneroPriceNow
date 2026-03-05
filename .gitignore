@@ -110,3 +110,4 @@ rcf/
 /src/DirectoryManager/DirectoryManager.NewsletterSender/appsettings.json
 /src/DirectoryManager/DirectoryManager.EmailMessageMaker/appsettings.json
 /CryptoPriceNow.Web/appsettings.json
+/src/CryptoPriceNow.Web/appsettings.json
