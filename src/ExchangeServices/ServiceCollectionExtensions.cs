@@ -7,6 +7,7 @@ using ExchangeServices.SageSwap;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Buffers.Text;
 using System.Net.Http.Headers;
 
 namespace ExchangeServices;
@@ -30,14 +31,19 @@ public static class ServiceCollectionExtensions
         services.AddLetsExchange(config);
         services.AddFuguSwap(config);
         services.AddCCECash(config);
+        services.AddDevilExchange(config);
+        services.AddSimpleSwap(config);
+        
+        
+        //  services.AddQuickEx(config); // auth issues
 
-  //      services.AddChangee(config);
-      //  services.AddSwapuz(config);
+        //      services.AddChangee(config); // auth issues 
+        //  services.AddSwapuz(config);
 
         //services.AddXgram(config);
         // services.AddNanswap(config);
 
-        services.AddDevilExchange(config);
+
         // 
 
         //  services.AddOctoSwap(config);
@@ -47,13 +53,52 @@ public static class ServiceCollectionExtensions
         //   
         //   
         //
-    //   services.AddWagyu(config);
+        //   services.AddWagyu(config);
         // services.AddWizardSwap(config);
         //  
         //    
         // services.AddCypherGoat(config);
         // services.AddXChange(config);
         //
+        return services;
+    }
+
+    public static IServiceCollection AddSimpleSwap(this IServiceCollection services, IConfiguration config)
+    {
+        services.Configure<SimpleSwapOptions>(config.GetSection("SimpleSwap"));
+
+        services.AddHttpClient<ISimpleSwapClient, SimpleSwapClient>((sp, client) =>
+        {
+            var opt = sp.GetRequiredService<IOptions<SimpleSwapOptions>>().Value;
+            client.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+
+        services.AddTransient<IExchangePriceApi>(sp => sp.GetRequiredService<ISimpleSwapClient>());
+        services.AddTransient<IExchangeBuyPriceApi>(sp => sp.GetRequiredService<ISimpleSwapClient>());
+        services.AddTransient<IExchangeCurrencyApi>(sp => sp.GetRequiredService<ISimpleSwapClient>());
+
+        return services;
+    }
+
+
+    public static IServiceCollection AddQuickEx(this IServiceCollection services, IConfiguration config)
+    {
+        services.Configure<QuickExOptions>(config.GetSection("QuickEx"));
+
+        services.AddHttpClient<IQuickExClient, QuickExClient>(client =>
+        {
+            var baseUrl = config["QuickEx:BaseUrl"] ?? "https://quickex.io";
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Accept
+                  .Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+        });
+
+        // ✅ ADD THESE THREE LINES — without them PriceService never sees QuickEx
+        services.AddTransient<IExchangePriceApi>(sp => sp.GetRequiredService<IQuickExClient>());
+        services.AddTransient<IExchangeBuyPriceApi>(sp => sp.GetRequiredService<IQuickExClient>());
+        services.AddTransient<IExchangeCurrencyApi>(sp => sp.GetRequiredService<IQuickExClient>());
+
         return services;
     }
 
