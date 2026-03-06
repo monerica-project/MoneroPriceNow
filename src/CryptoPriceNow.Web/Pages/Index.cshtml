@@ -211,6 +211,19 @@
   .flash-good { animation: flashGood 900ms ease-out; border-radius: 4px; }
   .flash-bad  { animation: flashBad  900ms ease-out; border-radius: 4px; }
 
+  /* ─── Sponsor row highlight ─── */
+  tbody tr.is-sponsor {
+    box-shadow: inset 0 0 0 1px rgba(242,104,34,.55),
+                inset 0 0 12px rgba(242,104,34,.06);
+    background: rgba(242,104,34,.04);
+  }
+  tbody tr.is-sponsor:hover {
+    background: rgba(242,104,34,.08);
+  }
+  tbody tr.is-sponsor td:first-child {
+    border-left: 2px solid var(--xmr-orange);
+  }
+
   /* ─── Skeleton shimmer ─── */
   @@keyframes shimmer {
     0%   { background-position: -600px 0; }
@@ -228,22 +241,12 @@
     background-size: 600px 100%;
     animation: shimmer 1.4s ease-in-out infinite;
   }
-  /* Hero skeleton blocks */
-  .skel-price {
-    width: 200px; height: 56px;
-    border-radius: 6px;
-  }
-  .skel-sub {
-    width: 120px; height: 13px;
-    border-radius: 4px;
-    margin-top: .45rem;
-  }
-  /* Table skeleton rows */
+  .skel-price { width: 200px; height: 56px; border-radius: 6px; }
+  .skel-sub   { width: 120px; height: 13px; border-radius: 4px; margin-top: .45rem; }
   .skel-row td { padding: .72rem 1rem; }
   .skel-name  { width: 90px;  height: 14px; border-radius: 4px; }
   .skel-num   { width: 72px;  height: 14px; border-radius: 4px; margin-left: auto; }
   .skel-ts    { width: 55px;  height: 12px; border-radius: 4px; margin-left: auto; }
-  /* Stagger each skeleton row's shimmer phase */
   .skel-row:nth-child(1) .skel { animation-delay: 0s; }
   .skel-row:nth-child(2) .skel { animation-delay: .12s; }
   .skel-row:nth-child(3) .skel { animation-delay: .24s; }
@@ -253,15 +256,11 @@
   .skel-row:nth-child(7) .skel { animation-delay: .72s; }
   .skel-row:nth-child(8) .skel { animation-delay: .84s; }
 
-  /* Fade-in when real data arrives */
   @@keyframes fadeInUp {
     from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-  .data-row {
-    animation: fadeInUp 220ms ease-out both;
-  }
-  /* Stagger data rows on arrival */
+  .data-row { animation: fadeInUp 220ms ease-out both; }
   .data-row:nth-child(1)  { animation-delay: 0ms; }
   .data-row:nth-child(2)  { animation-delay: 30ms; }
   .data-row:nth-child(3)  { animation-delay: 60ms; }
@@ -275,14 +274,11 @@
   .data-row:nth-child(11) { animation-delay: 300ms; }
   .data-row:nth-child(12) { animation-delay: 330ms; }
 
-  /* Hero number count-up flash */
   @@keyframes heroReveal {
     0%   { opacity: 0; transform: translateY(12px) scale(.96); filter: blur(4px); }
     100% { opacity: 1; transform: translateY(0)    scale(1);   filter: blur(0); }
   }
-  .hero-revealed {
-    animation: heroReveal 380ms cubic-bezier(.22,.68,0,1.2) both;
-  }
+  .hero-revealed { animation: heroReveal 380ms cubic-bezier(.22,.68,0,1.2) both; }
 
   @@media (max-width: 540px) {
     .price-hero           { grid-template-columns: 1fr; gap: .75rem; padding-top: .25rem; }
@@ -337,7 +333,6 @@
       </tr>
     </thead>
     <tbody id="pricesBody">
-      <!-- Skeleton rows shown while data loads -->
       <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
       <tr class="skel-row"><td><span class="skel skel-name" style="width:110px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
       <tr class="skel-row"><td><span class="skel skel-name" style="width:75px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
@@ -350,7 +345,6 @@
   </table>
 </div>
 
-<!-- Explainer cards at the bottom -->
 <div class="explainer-section">
   <div class="explainer-card">
     <span class="ec-title">&#x25BC; Buy price — lower is better</span>
@@ -383,6 +377,39 @@
   const prev = new Map();
   let heroFirstRender  = true;
   let tableFirstRender = true;
+
+  // ── Sponsor names (fetched once on load) ─────────────────────────
+  // Normalized: strip all non-alphanumeric chars, lowercase.
+  // "CCE Cash" -> "ccecash", "xChange.me" -> "xchangeme"
+  // Matches regardless of spaces, dots, dashes or capitalisation.
+  const sponsorKeys = new Set();
+
+  function normName(s) {
+    return String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  async function loadSponsors() {
+    try {
+      const res = await fetch('/api/sponsors', { cache: 'no-store' });
+      if (!res.ok) { console.warn('[MoneroPriceNow] Sponsor fetch HTTP', res.status); return; }
+      const data = await res.json();
+      const now  = Date.now();
+      sponsorKeys.clear();
+      for (const s of data) {
+        const exp = s.expirationDate ? new Date(s.expirationDate).getTime() : Infinity;
+        if (exp > now && s.name) {
+          sponsorKeys.add(normName(s.name));
+        }
+      }
+      console.log('[MoneroPriceNow] Sponsors loaded:', [...sponsorKeys]);
+    } catch (e) {
+      console.warn('[MoneroPriceNow] Could not load sponsor list:', e);
+    }
+  }
+
+  function isSponsor(siteName) {
+    return !!siteName && sponsorKeys.has(normName(siteName));
+  }
 
   // ── Timer ─────────────────────────────────────────────────────────
   let refreshAt  = Date.now() + INTERVAL;
@@ -466,12 +493,10 @@
       }
     });
 
-    // Sort by tightest spread first; exchanges with only one price sink to bottom
     rows.sort((a,b) => a.spreadPct !== b.spreadPct ? a.spreadPct - b.spreadPct :
                        a.spreadAbs !== b.spreadAbs ? a.spreadAbs - b.spreadAbs :
                        a.exchange.localeCompare(b.exchange));
 
-    // Drop exchanges where BOTH prices are absent — nothing useful to show
     const visibleRows = rows.filter(r => r.buy !== null || r.sell !== null);
 
     return {
@@ -508,21 +533,29 @@
     return eq(val,best) ? 'price-good' : eq(val,worst) ? 'price-bad' : '';
   }
 
+  function applySponsorClass(tr, siteName) {
+    if (isSponsor(siteName)) {
+      tr.classList.add('is-sponsor');
+    } else {
+      tr.classList.remove('is-sponsor');
+    }
+  }
+
   function renderTable(rows, bestBuy, worstBuy, bestSell, worstSell) {
     if (!rows.length) {
       bodyEl.innerHTML = `<tr><td colspan="4" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
       tableFirstRender = true; return;
     }
 
-    // ── First render: build DOM with staggered fadeInUp ──
     if (tableFirstRender) {
       bodyEl.innerHTML = rows.map(r => {
-        const key = r.exchange.trim().toLowerCase();
+        const key       = r.exchange.trim().toLowerCase();
+        const sponsorCls = isSponsor(r.siteName) ? ' is-sponsor' : '';
         prev.set(key, { buy: r.buy, sell: r.sell });
         const bT = (r.buy  !== null && r.buy  >= 1) ? fmt(r.buy)  : '—';
         const sT = (r.sell !== null && r.sell >= 1) ? fmt(r.sell) : '—';
         const ts = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
-        return `<tr class="data-row" data-ex="${esc(key)}">
+        return `<tr class="data-row${sponsorCls}" data-ex="${esc(key)}">
           <td>${nameLink(r)}</td>
           <td class="${pClass(r.buy,bestBuy,worstBuy)}" data-col="buy">${bT}</td>
           <td class="${pClass(r.sell,bestSell,worstSell)}" data-col="sell">${sT}</td>
@@ -532,17 +565,13 @@
       tableFirstRender = false; return;
     }
 
-    // ── Subsequent renders: update cells in-place ──
     const rowMap = new Map();
     bodyEl.querySelectorAll('tr[data-ex]').forEach(tr => rowMap.set(tr.dataset.ex, tr));
 
-    // Remove DOM rows for exchanges that dropped out (both prices now null)
     const visibleKeys = new Set(rows.map(r => r.exchange.trim().toLowerCase()));
     rowMap.forEach((tr, key) => {
       if (!visibleKeys.has(key)) {
-        tr.remove();
-        rowMap.delete(key);
-        prev.delete(key);
+        tr.remove(); rowMap.delete(key); prev.delete(key);
       }
     });
 
@@ -557,6 +586,8 @@
         bodyEl.appendChild(tr); rowMap.set(key, tr);
       }
 
+      applySponsorClass(tr, r.siteName);
+
       const buyCell  = tr.querySelector('[data-col="buy"]');
       const sellCell = tr.querySelector('[data-col="sell"]');
       const tsCell   = tr.querySelector('[data-col="ts"]');
@@ -565,7 +596,6 @@
       const bC = pClass(r.buy,  bestBuy,  worstBuy);
       const sC = pClass(r.sell, bestSell, worstSell);
 
-      // Buy cell — only flash if numeric value changed
       if (buyCell.textContent !== bT) {
         const realChange = p.buy !== null && r.buy !== null && !eq(r.buy, p.buy);
         const flash = realChange ? (r.buy < p.buy ? 'flash-good' : 'flash-bad') : '';
@@ -576,7 +606,6 @@
         buyCell.className = bC;
       }
 
-      // Sell cell — only flash if numeric value changed
       if (sellCell.textContent !== sT) {
         const realChange = p.sell !== null && r.sell !== null && !eq(r.sell, p.sell);
         const flash = realChange ? (r.sell > p.sell ? 'flash-good' : 'flash-bad') : '';
@@ -616,7 +645,7 @@
     }
   }
 
-  // ── Boot ──────────────────────────────────────────────────────────
-  refresh().then(scheduleNext);
+  // ── Boot: load sponsors once, then start price loop ───────────────
+  loadSponsors().then(() => refresh().then(scheduleNext));
 })();
 </script>
