@@ -162,9 +162,12 @@
     max-width: 900px; margin: 0 auto;
     background: var(--surface2);
     border: 1px solid var(--border);
-    border-radius: 10px; overflow: hidden;
+    border-radius: 10px;
+    overflow-x: auto;            /* horizontal scroll on mobile */
+    overflow-y: hidden;          /* prevent vertical scrollbar flash during DOM reorder */
+    -webkit-overflow-scrolling: touch;
   }
-  table { width: 100%; border-collapse: collapse; }
+  table { width: 100%; min-width: 520px; border-collapse: collapse; }
   thead tr {
     background: var(--surface3);
     border-bottom: 1px solid var(--border-hi);
@@ -208,8 +211,8 @@
 
   @@keyframes flashGood { 0% { background: rgba(62,207,142,.18); } 100% { background: transparent; } }
   @@keyframes flashBad  { 0% { background: rgba(255,91,91,.18); }  100% { background: transparent; } }
-  .flash-good { animation: flashGood 900ms ease-out; border-radius: 4px; }
-  .flash-bad  { animation: flashBad  900ms ease-out; border-radius: 4px; }
+  .flash-good { animation: flashGood 900ms ease-out forwards; border-radius: 4px; }
+  .flash-bad  { animation: flashBad  900ms ease-out forwards; border-radius: 4px; }
 
   /* ─── Sponsor row highlight ─── */
   /* ── Sortable headers ───────────────────────────────────────────── */
@@ -403,6 +406,20 @@
   @@media (max-width: 540px) {
     .sponsor-grid { grid-template-columns: 1fr; }
   }
+
+  @@media (max-width: 768px) {
+    tbody tr.is-sponsor td:first-child {
+      border-left: 3px solid var(--xmr-orange);
+    }
+    tbody tr.is-sponsor {
+      box-shadow: inset 0 0 0 1px rgba(242,104,34,.7),
+                  inset 0 0 16px rgba(242,104,34,.1);
+      background: rgba(242,104,34,.07);
+    }
+    tbody tr.is-sponsor:hover {
+      background: rgba(242,104,34,.12);
+    }
+  }
 </style>
 
 <div class="pair-label">XMR / USDT (TRC20) &nbsp;·&nbsp; Real-time floating rates</div>
@@ -477,8 +494,7 @@
 <!-- ── Disclosure ─────────────────────────────────────────────────── -->
 <div class="disclosure">
   Prices are indicative floating rates.&nbsp;&nbsp;
-  Disclosure: all links are affiliate links in which we may earn commission.&nbsp;&nbsp;
-  &copy; <script>document.write(new Date().getFullYear())</script> MoneroPriceNow.com
+  Some links on this page may be affiliate links in which we may earn a commission.
 </div>
 
 <!-- ── Sponsor section (rendered from /api/sponsors) ─────────────── -->
@@ -503,7 +519,8 @@
   const CIRCUMF  = 37.7;
   const EPS      = 1e-9;
 
-  const prev = new Map();
+  const prev       = new Map();
+  const flashTimers = new WeakMap();  // cell el → pending flash timer id
   let heroFirstRender  = true;
   let tableFirstRender = true;
 
@@ -515,8 +532,9 @@
   let lastStats = null;   // cached so re-sort doesn't need a fetch
 
   // ── Sponsor data (fetched once on load) ──────────────────────────
-  const sponsorKeys = new Set();   // norm keys for table highlight
-  let   sponsorData = [];          // full objects for sponsor section
+  const sponsorKeys = new Set();        // norm keys for table highlight
+  const sponsorLinks = new Map();       // normName -> direct sponsor link
+  let   sponsorData = [];               // full objects for sponsor section
 
   function normName(s) {
     return String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -533,7 +551,9 @@
       for (const s of data) {
         const exp = s.expirationDate ? new Date(s.expirationDate).getTime() : Infinity;
         if (s.name) {
-          sponsorKeys.add(normName(s.name));
+          const nk = normName(s.name);
+          sponsorKeys.add(nk);
+          if (s.link) sponsorLinks.set(nk, s.link);
           if (exp > now) sponsorData.push({ ...s, _exp: exp });
         }
       }
@@ -692,17 +712,26 @@
   }
 
   function nameLink(row) {
-    const n = esc(row.siteName);
-    return row.siteUrl
-      ? `<a class="ex-name" href="${esc(row.siteUrl)}" target="_blank" rel="noopener sponsored">${n}</a>`
+    const n    = esc(row.siteName);
+    const sKey = normName(row.siteName);
+    const href = sponsorLinks.has(sKey)
+      ? esc(sponsorLinks.get(sKey))          // sponsor: use direct link, no affiliate
+      : row.siteUrl ? esc(row.siteUrl) : null;
+    const rel  = sponsorLinks.has(sKey) ? 'noopener sponsored' : 'noopener sponsored';
+    return href
+      ? `<a class="ex-name" href="${href}" target="_blank" rel="${rel}">${n}</a>`
       : `<span class="ex-name">${n}</span>`;
   }
 
   function heroSubHtml(row, verb) {
     if (!row) return 'loading…';
-    const n = esc(row.siteName);
-    return row.siteUrl
-      ? `${verb} on <a href="${esc(row.siteUrl)}" target="_blank" rel="noopener sponsored">${n}</a>`
+    const n    = esc(row.siteName);
+    const sKey = normName(row.siteName);
+    const href = sponsorLinks.has(sKey)
+      ? esc(sponsorLinks.get(sKey))
+      : row.siteUrl ? esc(row.siteUrl) : null;
+    return href
+      ? `${verb} on <a href="${href}" target="_blank" rel="noopener sponsored">${n}</a>`
       : `${verb} on <strong>${n}</strong>`;
   }
 
@@ -829,7 +858,12 @@
           <td class="ts-cell" data-col="ts">${ts}</td>
         </tr>`;
       }).join('');
-      tableFirstRender = false; return;
+      tableFirstRender = false;
+      // Strip fadeInUp class after animations complete so reorders never retrigger it
+      setTimeout(() => {
+        bodyEl.querySelectorAll('tr.data-row').forEach(tr => tr.classList.remove('data-row'));
+      }, 450);
+      return;
     }
 
     const rowMap = new Map();
@@ -863,36 +897,45 @@
       const bC = pClass(r.buy,  bestBuy,  worstBuy);
       const sC = pClass(r.sell, bestSell, worstSell);
 
-      if (buyCell.textContent !== bT) {
-        const realChange = p.buy !== null && r.buy !== null && !eq(r.buy, p.buy);
-        const flash = realChange ? (r.buy < p.buy ? 'flash-good' : 'flash-bad') : '';
-        buyCell.className = [flash, bC].filter(Boolean).join(' ');
-        if (flash) setTimeout(() => { buyCell.className = bC; }, 950);
-        buyCell.textContent = bT;
-      } else {
-        buyCell.className = bC;
+      // Cancel any pending flash timer before touching the cell,
+      // preventing a stale timeout from overwriting the class we're about to set.
+      function setCell(cell, newText, baseClass, oldVal, newVal, better) {
+        const tid = flashTimers.get(cell);
+        if (tid != null) { clearTimeout(tid); flashTimers.delete(cell); }
+
+        const valueChanged  = newText !== cell.textContent;
+        const realChange    = oldVal !== null && newVal !== null && !eq(newVal, oldVal);
+        const shouldFlash   = valueChanged && realChange;
+        const flashCls      = shouldFlash ? (better ? 'flash-good' : 'flash-bad') : '';
+
+        cell.className      = [flashCls, baseClass].filter(Boolean).join(' ');
+        cell.textContent    = newText;
+
+        if (flashCls) {
+          const t = setTimeout(() => { cell.className = baseClass; flashTimers.delete(cell); }, 950);
+          flashTimers.set(cell, t);
+        }
       }
 
-      if (sellCell.textContent !== sT) {
-        const realChange = p.sell !== null && r.sell !== null && !eq(r.sell, p.sell);
-        const flash = realChange ? (r.sell > p.sell ? 'flash-good' : 'flash-bad') : '';
-        sellCell.className = [flash, sC].filter(Boolean).join(' ');
-        if (flash) setTimeout(() => { sellCell.className = sC; }, 950);
-        sellCell.textContent = sT;
-      } else {
-        sellCell.className = sC;
-      }
+      setCell(buyCell,  bT, bC, p.buy,  r.buy,  r.buy  !== null && p.buy  !== null && r.buy  < p.buy);
+      setCell(sellCell, sT, sC, p.sell, r.sell, r.sell !== null && p.sell !== null && r.sell > p.sell);
 
       tsCell.textContent = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
       prev.set(key, { buy: r.buy, sell: r.sell });
     });
 
-    // Re-order DOM rows to match sorted order (cheap — just appending reorders)
-    sorted.forEach(r => {
-      const key = r.exchange.trim().toLowerCase();
-      const tr  = bodyEl.querySelector(`tr[data-ex="${key}"]`);
-      if (tr) bodyEl.appendChild(tr);
-    });
+    // Only reorder DOM rows if their order actually changed — avoids
+    // unnecessary reflows and any animation/scrollbar side-effects.
+    const currentOrder = [...bodyEl.querySelectorAll('tr[data-ex]')].map(tr => tr.dataset.ex);
+    const desiredOrder = sorted.map(r => r.exchange.trim().toLowerCase());
+    const orderChanged = currentOrder.length !== desiredOrder.length ||
+                         currentOrder.some((k, i) => k !== desiredOrder[i]);
+    if (orderChanged) {
+      desiredOrder.forEach(key => {
+        const tr = bodyEl.querySelector(`tr[data-ex="${key}"]`);
+        if (tr) bodyEl.appendChild(tr);
+      });
+    }
   }
 
   // ── Fetch ─────────────────────────────────────────────────────────
@@ -944,3 +987,4 @@
   loadSponsors().then(() => refresh().then(scheduleNext));
 })();
 </script>
+
