@@ -200,8 +200,10 @@ public sealed class PriceService : IPriceService
     //   2. Slow path: acquire a per-key semaphore, double-check the cache,
     //      then only ONE caller executes the factory; all others wait and then
     //      read the value the winner wrote.
-    //   3. Exceptions from the factory are never cached — next caller retries.
-    //   4. Null results are never cached — a failed/empty exchange response
+    //   3. OperationCanceledException is always re-thrown — it is never cached
+    //      and the semaphore is only released if it was successfully acquired.
+    //   4. Other exceptions from the factory are never cached — next caller retries.
+    //   5. Null results are never cached — a failed/empty exchange response
     //      doesn't poison the cache slot for the full TTL.
     // -------------------------------------------------------------------------
     private async Task<T?> GetOrCreateLockedAsync<T>(
@@ -216,7 +218,12 @@ public sealed class PriceService : IPriceService
 
         var sem = keyLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
 
-        await sem.WaitAsync(ct);
+        // Use CancellationToken.None — if we passed ct here and it fired, WaitAsync
+        // would throw BEFORE the semaphore was acquired, but after another caller
+        // might be waiting on it. That leaves the internal count broken. Instead,
+        // we always acquire, then check ct immediately afterward and bail early.
+        await sem.WaitAsync(CancellationToken.None);
+
         try
         {
             // Double-check: another caller may have populated the cache
@@ -224,14 +231,22 @@ public sealed class PriceService : IPriceService
             if (cache.TryGetValue(key, out cached))
                 return cached;
 
+            // Bail out cleanly if cancelled while we were waiting — no point fetching
+            if (ct.IsCancellationRequested)
+                return default;
+
             T? value;
             try
             {
                 value = await factory();
             }
+            catch (OperationCanceledException)
+            {
+                throw; // propagate — don't cache cancellation
+            }
             catch
             {
-                // Don't cache exceptions — next caller gets a fresh attempt
+                // Don't cache other exceptions — next caller gets a fresh attempt
                 return default;
             }
 
