@@ -212,6 +212,17 @@
   .flash-bad  { animation: flashBad  900ms ease-out; border-radius: 4px; }
 
   /* ─── Sponsor row highlight ─── */
+  /* ── Sortable headers ───────────────────────────────────────────── */
+  .th-sort {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .th-sort:hover { color: var(--xmr-orange); }
+  .th-sort.sort-active { color: var(--xmr-orange); }
+  .sort-arrow { display: inline-block; width: 1em; text-align: center; font-size: .75em; opacity: .4; }
+  .th-sort.sort-active .sort-arrow { opacity: 1; }
+
   tbody tr.is-sponsor {
     box-shadow: inset 0 0 0 1px rgba(242,104,34,.55),
                 inset 0 0 12px rgba(242,104,34,.06);
@@ -287,6 +298,111 @@
     .price-block:last-child { text-align: left; padding-left: 0; }
     .pair-label           { margin-top: 0; }
   }
+
+  /* ─── Disclosure ──────────────────────────────────────────────── */
+  .disclosure {
+    max-width: 900px; margin: 1.5rem auto 0;
+    font-family: var(--mono); font-size: .62rem;
+    color: var(--text-muted); text-align: center;
+    line-height: 1.6;
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+  }
+  .disclosure a { color: var(--xmr-orange2); text-decoration: none; }
+  .disclosure a:hover { text-decoration: underline; }
+
+  /* ─── Sponsor section ─────────────────────────────────────────── */
+  .sponsor-section {
+    max-width: 900px; margin: 1.5rem auto 2.5rem;
+  }
+  .sponsor-section-title {
+    font-family: var(--mono);
+    font-size: .63rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--xmr-orange);
+    margin-bottom: 1rem;
+  }
+  .sponsor-tier {
+    margin-bottom: 1.5rem;
+  }
+  .sponsor-tier-label {
+    font-family: var(--mono);
+    font-size: .58rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: .6rem;
+    padding-bottom: .3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .sponsor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: .75rem;
+  }
+  .sponsor-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: .85rem 1rem;
+    transition: border-color .15s, transform .15s;
+  }
+  .sponsor-card:hover {
+    border-color: var(--border-hi);
+    transform: translateY(-1px);
+  }
+  .sponsor-card-name {
+    font-family: var(--sans);
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .sponsor-card-name a {
+    color: var(--text);
+    text-decoration: none;
+  }
+  .sponsor-card-name a:hover { color: var(--xmr-orange2); }
+  .sponsor-card-rating {
+    font-family: var(--mono);
+    font-size: .62rem;
+    color: var(--text-muted);
+    margin-top: .25rem;
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+  }
+  .stars-wrap { display: inline-block; position: relative; font-size: .85em; letter-spacing: .05em; line-height: 1; }
+  .stars-empty { color: rgba(242,104,34,.25); }
+  .stars-fill  { position: absolute; top: 0; left: 0; overflow: hidden; white-space: nowrap; color: var(--xmr-orange); }
+  .sponsor-card-rating a { color: var(--xmr-orange2); text-decoration: none; }
+  .sponsor-card-rating a:hover { text-decoration: underline; }
+  .sponsor-card-desc {
+    font-family: var(--mono);
+    font-size: .65rem;
+    color: var(--text-muted);
+    line-height: 1.55;
+    margin-top: .5rem;
+  }
+  .sponsor-card-note {
+    font-family: var(--mono);
+    font-size: .6rem;
+    color: var(--xmr-orange);
+    margin-top: .3rem;
+    opacity: .85;
+  }
+  .sponsor-card-expiry {
+    font-family: var(--mono);
+    font-size: .58rem;
+    color: var(--text-muted);
+    margin-top: .4rem;
+    opacity: .6;
+  }
+  #sponsorSection { display: none; }
+
+  @@media (max-width: 540px) {
+    .sponsor-grid { grid-template-columns: 1fr; }
+  }
 </style>
 
 <div class="pair-label">XMR / USDT (TRC20) &nbsp;·&nbsp; Real-time floating rates</div>
@@ -326,9 +442,9 @@
   <table>
     <thead>
       <tr>
-        <th>Exchange</th>
-        <th>Buy ($ per XMR)</th>
-        <th>Sell ($ per XMR)</th>
+        <th class="th-sort" data-sort="name">Exchange <span class="sort-arrow"></span></th>
+        <th class="th-sort" data-sort="buy">Buy ($ per XMR) <span class="sort-arrow"></span></th>
+        <th class="th-sort" data-sort="sell">Sell ($ per XMR) <span class="sort-arrow"></span></th>
         <th>Updated</th>
       </tr>
     </thead>
@@ -358,6 +474,19 @@
   </div>
 </div>
 
+<!-- ── Disclosure ─────────────────────────────────────────────────── -->
+<div class="disclosure">
+  Prices are indicative floating rates.&nbsp;&nbsp;
+  Disclosure: all links are affiliate links in which we may earn commission.&nbsp;&nbsp;
+  &copy; <script>document.write(new Date().getFullYear())</script> MoneroPriceNow.com
+</div>
+
+<!-- ── Sponsor section (rendered from /api/sponsors) ─────────────── -->
+<div class="sponsor-section" id="sponsorSection">
+  <div class="sponsor-section-title">&#x2605; Sponsors</div>
+  <div id="sponsorTiers"></div>
+</div>
+
 <script>
 (() => {
   // ── DOM refs ──────────────────────────────────────────────────────
@@ -378,11 +507,16 @@
   let heroFirstRender  = true;
   let tableFirstRender = true;
 
-  // ── Sponsor names (fetched once on load) ─────────────────────────
-  // Normalized: strip all non-alphanumeric chars, lowercase.
-  // "CCE Cash" -> "ccecash", "xChange.me" -> "xchangeme"
-  // Matches regardless of spaces, dots, dashes or capitalisation.
-  const sponsorKeys = new Set();
+  // ── Sort state ───────────────────────────────────────────────────────
+  // sortKey: null (default spread sort), 'name', 'buy', 'sell'
+  // sortDir: 1 = asc/low-first  -1 = desc/high-first
+  let sortKey = null;
+  let sortDir = 1;
+  let lastStats = null;   // cached so re-sort doesn't need a fetch
+
+  // ── Sponsor data (fetched once on load) ──────────────────────────
+  const sponsorKeys = new Set();   // norm keys for table highlight
+  let   sponsorData = [];          // full objects for sponsor section
 
   function normName(s) {
     return String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -395,16 +529,111 @@
       const data = await res.json();
       const now  = Date.now();
       sponsorKeys.clear();
+      sponsorData = [];
       for (const s of data) {
         const exp = s.expirationDate ? new Date(s.expirationDate).getTime() : Infinity;
-        if (exp > now && s.name) {
+        if (s.name) {
           sponsorKeys.add(normName(s.name));
+          if (exp > now) sponsorData.push({ ...s, _exp: exp });
         }
       }
+      // Sort: tier order first, then within each tier: longest expiration first
+      const TIER_ORDER = ['MainSponsor','CategorySponsor','SubCategorySponsor','SubSponsor'];
+      sponsorData.sort((a,b) => {
+        const ta = TIER_ORDER.indexOf(a.sponsorshipType);
+        const tb = TIER_ORDER.indexOf(b.sponsorshipType);
+        const tierDiff = (ta < 0 ? 99 : ta) - (tb < 0 ? 99 : tb);
+        if (tierDiff !== 0) return tierDiff;
+        // Same tier: later expiry first (descending)
+        return b._exp - a._exp;
+      });
       console.log('[MoneroPriceNow] Sponsors loaded:', [...sponsorKeys]);
+      renderSponsorSection();
     } catch (e) {
       console.warn('[MoneroPriceNow] Could not load sponsor list:', e);
     }
+  }
+
+  // ── Star rating helper ────────────────────────────────────────────
+  function starHtml(rating) {
+    if (rating == null) return '';
+    const pct = Math.round((rating / 5) * 100);
+    return `<span class="stars-wrap">` +
+      `<span class="stars-empty">★★★★★</span>` +
+      `<span class="stars-fill" style="width:${pct}%">★★★★★</span>` +
+      `</span>`;
+  }
+
+  // ── Render sponsor cards below the disclosure ─────────────────────
+  function renderSponsorSection() {
+    const section  = document.getElementById('sponsorSection');
+    const tiersEl  = document.getElementById('sponsorTiers');
+    if (!section || !tiersEl || !sponsorData.length) return;
+
+    // Group by sponsorshipType
+    const groups = new Map();
+    for (const s of sponsorData) {
+      const key = s.sponsorshipType ?? 'Other';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    }
+
+    // Pretty tier label
+    function tierLabel(key) {
+      if (key === 'MainSponsor')         return 'Main Sponsors';
+      if (key === 'CategorySponsor')     return 'Category Sponsors';
+      if (key === 'SubSponsor')          return 'Sub Sponsors';
+      // Handle any capitalisation variant of subcategory
+      const norm = key.replace(/[-_\s]/g,'').toLowerCase();
+      if (norm === 'subcategorysponsor') return 'Subcategory Sponsors';
+      return key.replace(/([A-Z])/g, ' $1').trim(); // fallback: split CamelCase
+    }
+
+    // Tier order
+    const ORDER = ['MainSponsor','CategorySponsor','SubSponsor'];
+    const sortedGroups = [...groups.keys()].sort((a,b) => {
+      const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+
+    tiersEl.innerHTML = sortedGroups.map(tierKey => {
+      const sponsors = groups.get(tierKey);
+      const cards = sponsors.map(s => {
+        const link    = esc(s.link ?? '');
+        const name    = esc(s.name ?? '');
+        const desc    = esc(s.description ?? '');
+        const note    = s.note ? esc(s.note) : '';
+        const rating  = s.reviewRating;
+        const count   = s.reviewCount ?? 0;
+        const revLink = esc(s.reviewLink ?? '');
+
+        const ratingHtml = (rating != null && count > 0)
+          ? `<div class="sponsor-card-rating">
+              ${starHtml(rating)}
+              <span>${rating.toFixed(1)}</span>
+              <a href="${revLink}" target="_blank" rel="noopener">(${count} review${count !== 1 ? 's' : ''})</a>
+             </div>`
+          : '';
+
+        const expDate = new Date(s.expirationDate);
+        const expStr  = expDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        return `<div class="sponsor-card">
+          <div class="sponsor-card-name"><a href="${link}" target="_blank" rel="noopener sponsored">${name}</a></div>
+          ${ratingHtml}
+          ${desc ? `<div class="sponsor-card-desc">${desc}</div>` : ''}
+          ${note ? `<div class="sponsor-card-note">${note}</div>` : ''}
+          <div class="sponsor-card-expiry">Sponsored until ${expStr}</div>
+        </div>`;
+      }).join('');
+
+      return `<div class="sponsor-tier">
+        <div class="sponsor-tier-label">${tierLabel(tierKey)}</div>
+        <div class="sponsor-grid">${cards}</div>
+      </div>`;
+    }).join('');
+
+    section.style.display = 'block';
   }
 
   function isSponsor(siteName) {
@@ -493,10 +722,7 @@
       }
     });
 
-    rows.sort((a,b) => a.spreadPct !== b.spreadPct ? a.spreadPct - b.spreadPct :
-                       a.spreadAbs !== b.spreadAbs ? a.spreadAbs - b.spreadAbs :
-                       a.exchange.localeCompare(b.exchange));
-
+    // Note: actual sort order is applied in sortedRows() based on user's chosen column.
     const visibleRows = rows.filter(r => r.buy !== null || r.sell !== null);
 
     return {
@@ -506,6 +732,45 @@
       bestSellVal:  withSell.length ? Math.max(...withSell.map(r=>r.sell)) : null,
       worstSellVal: withSell.length ? Math.min(...withSell.map(r=>r.sell)) : null,
     };
+  }
+
+  // ── Sort ─────────────────────────────────────────────────────────
+  function sortedRows(rows) {
+    if (!sortKey) {
+      // Default: spread ascending (best deals first)
+      return [...rows].sort((a,b) =>
+        a.spreadPct !== b.spreadPct ? a.spreadPct - b.spreadPct :
+        a.spreadAbs !== b.spreadAbs ? a.spreadAbs - b.spreadAbs :
+        a.exchange.localeCompare(b.exchange));
+    }
+    return [...rows].sort((a,b) => {
+      let v;
+      if (sortKey === 'name') {
+        v = (a.siteName ?? '').localeCompare(b.siteName ?? '');
+      } else if (sortKey === 'buy') {
+        const av = a.buy  ?? (sortDir > 0 ? Infinity : -Infinity);
+        const bv = b.buy  ?? (sortDir > 0 ? Infinity : -Infinity);
+        v = av - bv;
+      } else if (sortKey === 'sell') {
+        const av = a.sell ?? (sortDir > 0 ? -Infinity : Infinity);
+        const bv = b.sell ?? (sortDir > 0 ? -Infinity : Infinity);
+        v = av - bv;
+      }
+      return v * sortDir;
+    });
+  }
+
+  function updateSortHeaders() {
+    document.querySelectorAll('.th-sort').forEach(th => {
+      const arrow = th.querySelector('.sort-arrow');
+      if (th.dataset.sort === sortKey) {
+        th.classList.add('sort-active');
+        arrow.textContent = sortDir > 0 ? ' ▲' : ' ▼';
+      } else {
+        th.classList.remove('sort-active');
+        arrow.textContent = '';
+      }
+    });
   }
 
   // ── Hero ──────────────────────────────────────────────────────────
@@ -547,8 +812,10 @@
       tableFirstRender = true; return;
     }
 
+    const sorted = sortedRows(rows);
+
     if (tableFirstRender) {
-      bodyEl.innerHTML = rows.map(r => {
+      bodyEl.innerHTML = sorted.map(r => {
         const key       = r.exchange.trim().toLowerCase();
         const sponsorCls = isSponsor(r.siteName) ? ' is-sponsor' : '';
         prev.set(key, { buy: r.buy, sell: r.sell });
@@ -575,7 +842,7 @@
       }
     });
 
-    rows.forEach(r => {
+    sorted.forEach(r => {
       const key = r.exchange.trim().toLowerCase();
       const p   = prev.get(key) || { buy: null, sell: null };
       let   tr  = rowMap.get(key);
@@ -619,6 +886,13 @@
       tsCell.textContent = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
       prev.set(key, { buy: r.buy, sell: r.sell });
     });
+
+    // Re-order DOM rows to match sorted order (cheap — just appending reorders)
+    sorted.forEach(r => {
+      const key = r.exchange.trim().toLowerCase();
+      const tr  = bodyEl.querySelector(`tr[data-ex="${key}"]`);
+      if (tr) bodyEl.appendChild(tr);
+    });
   }
 
   // ── Fetch ─────────────────────────────────────────────────────────
@@ -636,14 +910,35 @@
         return;
       }
       const s = computeStats(data);
+      lastStats = s;
       renderHero(s.bestBuyRow, s.bestSellRow);
       renderTable(s.rows, s.bestBuyVal, s.worstBuyVal, s.bestSellVal, s.worstSellVal);
+      updateSortHeaders();
       lastEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
     } catch (err) {
       console.error('[MoneroPriceNow] Refresh error:', err);
       lastEl.textContent = 'Update failed (retrying…)';
     }
   }
+
+  // ── Sort header click handler ────────────────────────────────────
+  document.querySelectorAll('.th-sort').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (sortKey === col) {
+        sortDir = -sortDir;             // same column → flip direction
+      } else {
+        sortKey = col;
+        // sensible defaults: buy asc (low=good), sell desc (high=good), name asc
+        sortDir = col === 'sell' ? -1 : 1;
+      }
+      updateSortHeaders();
+      if (lastStats) {
+        renderTable(lastStats.rows, lastStats.bestBuyVal, lastStats.worstBuyVal,
+                    lastStats.bestSellVal, lastStats.worstSellVal);
+      }
+    });
+  });
 
   // ── Boot: load sponsors once, then start price loop ───────────────
   loadSponsors().then(() => refresh().then(scheduleNext));
