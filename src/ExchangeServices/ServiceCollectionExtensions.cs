@@ -33,8 +33,7 @@ public static class ServiceCollectionExtensions
         services.AddCCECash(config);
         services.AddDevilExchange(config);
         services.AddSimpleSwap(config);
-        
-        
+        services.AddGoDex(config);
         //  services.AddQuickEx(config); // auth issues
 
         //      services.AddChangee(config); // auth issues 
@@ -62,6 +61,29 @@ public static class ServiceCollectionExtensions
         //
         return services;
     }
+    public static IServiceCollection AddGoDex(this IServiceCollection services, IConfiguration config)
+    {
+
+        // ── GoDex ────────────────────────────────────────────────────────────────────
+        // Add to your Program.cs / service registration
+
+        services.Configure<GoDexOptions>(
+        config.GetSection("GoDex"));
+
+        services.AddHttpClient<IGoDexClient, GoDexClient>(client =>
+        {
+            client.BaseAddress = new Uri(
+                config["GoDex:BaseUrl"] ?? "https://api.godex.io");
+        });
+
+        // Register as price, buy-price, and currency API
+        services.AddTransient<IExchangePriceApi>(sp => sp.GetRequiredService<IGoDexClient>());
+        services.AddTransient<IExchangeBuyPriceApi>(sp => sp.GetRequiredService<IGoDexClient>());
+        services.AddTransient<IExchangeCurrencyApi>(sp => sp.GetRequiredService<IGoDexClient>());
+
+        return services;
+    }
+
 
     public static IServiceCollection AddSimpleSwap(this IServiceCollection services, IConfiguration config)
     {
