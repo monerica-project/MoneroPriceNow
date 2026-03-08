@@ -34,12 +34,14 @@ public static class ServiceCollectionExtensions
         services.AddDevilExchange(config);
         services.AddSimpleSwap(config);
         services.AddGoDex(config);
-        //  services.AddQuickEx(config); // auth issues
+       // services.AddBitcoinVN(config);
 
-        //      services.AddChangee(config); // auth issues 
+        //services.AddQuickEx(config); // auth issues
+
+              services.AddChangee(config); // auth issues 
         //  services.AddSwapuz(config);
 
-        //services.AddXgram(config);
+        //  services.AddXgram(config);
         // services.AddNanswap(config);
 
 
@@ -61,6 +63,29 @@ public static class ServiceCollectionExtensions
         //
         return services;
     }
+
+    public static IServiceCollection AddBitcoinVN(this IServiceCollection services, IConfiguration config)
+    {
+
+        // ── BitcoinVN ─────────────────────────────────────────────────────────────────
+        // Add to your Program.cs / service registration
+
+        services.Configure<BitcoinVNOptions>(
+        config.GetSection("BitcoinVN"));
+
+        services.AddHttpClient<IBitcoinVNClient, BitcoinVNClient>(client =>
+        {
+            client.BaseAddress = new Uri(
+                config["BitcoinVN:BaseUrl"] ?? "https://bitcoinvn.io");
+        });
+
+        services.AddTransient<IExchangePriceApi>(sp => sp.GetRequiredService<IBitcoinVNClient>());
+        services.AddTransient<IExchangeBuyPriceApi>(sp => sp.GetRequiredService<IBitcoinVNClient>());
+        services.AddTransient<IExchangeCurrencyApi>(sp => sp.GetRequiredService<IBitcoinVNClient>());
+
+        return services;
+    }
+
     public static IServiceCollection AddGoDex(this IServiceCollection services, IConfiguration config)
     {
 
