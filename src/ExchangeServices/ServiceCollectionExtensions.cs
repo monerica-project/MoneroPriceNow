@@ -34,12 +34,17 @@ public static class ServiceCollectionExtensions
         services.AddDevilExchange(config);
         services.AddSimpleSwap(config);
         services.AddGoDex(config);
-       // services.AddBitcoinVN(config);
+        services.AddChangee(config);
+        services.AddAlfaCash(config);
+
+
+        // services.AddBitcoinVN(config);
 
         //services.AddQuickEx(config); // auth issues
 
-              services.AddChangee(config); // auth issues 
-        //  services.AddSwapuz(config);
+        // auth issues 
+        //services.AddSwapuz(config);
+
 
         //  services.AddXgram(config);
         // services.AddNanswap(config);
@@ -61,6 +66,28 @@ public static class ServiceCollectionExtensions
         // services.AddCypherGoat(config);
         // services.AddXChange(config);
         //
+        return services;
+    }
+
+
+    public static IServiceCollection AddAlfaCash(this IServiceCollection services, IConfiguration config)
+    {
+        // ── AlfaCash ──────────────────────────────────────────────────────────────────
+        // Add to your Program.cs / service registration
+
+        services.Configure<AlfaCashOptions>(
+        config.GetSection("AlfaCash"));
+
+        services.AddHttpClient<IAlfaCashClient, AlfaCashClient>(client =>
+        {
+            client.BaseAddress = new Uri(
+               config["AlfaCash:BaseUrl"] ?? "https://www.alfa.cash");
+        });
+
+        services.AddTransient<IExchangePriceApi>(sp => sp.GetRequiredService<IAlfaCashClient>());
+        services.AddTransient<IExchangeBuyPriceApi>(sp => sp.GetRequiredService<IAlfaCashClient>());
+        services.AddTransient<IExchangeCurrencyApi>(sp => sp.GetRequiredService<IAlfaCashClient>());
+
         return services;
     }
 
