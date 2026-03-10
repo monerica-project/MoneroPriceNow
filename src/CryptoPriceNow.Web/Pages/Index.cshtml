@@ -260,6 +260,11 @@
   th[data-sort="privacy"] { text-align: left; padding-left: 1.1rem; }
   td[data-col="privacy"]  { padding-left: 1.1rem; }
 
+  /* ─── Spread column ─── */
+  td[data-col="spread"] { color: var(--text-muted); font-size: .8rem; }
+  .spread-tight { color: var(--good)   !important; }
+  .spread-wide  { color: var(--bad)    !important; }
+
   /* ─── Skeleton shimmer ─── */
   @@keyframes shimmer {
     0%   { background-position: -600px 0; }
@@ -485,18 +490,19 @@
         <th class="th-sort" data-sort="privacy">Privacy <span class="sort-arrow"></span></th>
         <th class="th-sort" data-sort="buy">Buy ($ per XMR) <span class="sort-arrow"></span></th>
         <th class="th-sort" data-sort="sell">Sell ($ per XMR) <span class="sort-arrow"></span></th>
+        <th class="th-sort" data-sort="spread">Spread <span class="sort-arrow"></span></th>
         <th>Updated</th>
       </tr>
     </thead>
     <tbody id="pricesBody">
-      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:110px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:75px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:95px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:80px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:100px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:88px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:110px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:75px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:95px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:80px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:100px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:88px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
     </tbody>
   </table>
 </div>
@@ -720,6 +726,21 @@
   function num(v)  { const n = Number(v); return Number.isFinite(n) ? n : null; }
   function fmt(n)  { const x = Number(n); return Number.isFinite(x) ? '$' + x.toFixed(2) : '—'; }
   function eq(a,b) { return a !== null && b !== null && Math.abs(a - b) < EPS; }
+  function spreadClass(pct) {
+    if (pct === Infinity || pct == null) return '';
+    if (pct < 0.01) return 'spread-tight';
+    if (pct > 0.04) return 'spread-wide';
+    return '';
+  }
+  function fmtSpread(pct) {
+    if (pct === Infinity || pct == null) return '—';
+    return (pct * 100).toFixed(2) + '%';
+  }
+  function updateTitle(buy, sell) {
+    const b = (buy  !== null && buy  >= 1) ? '$' + buy.toFixed(2)  : '—';
+    const s = (sell !== null && sell >= 1) ? '$' + sell.toFixed(2) : '—';
+    document.title = b + ' / ' + s + ' · MoneroPriceNow.com';
+  }
   function pick(obj, ...keys) {
     for (const k of keys) { const v = obj[k]; if (v !== undefined && v !== null && v !== '') return v; }
     return null;
@@ -823,6 +844,10 @@
       } else if (sortKey === 'privacy') {
         const order = s => { if (!s) return 99; const i = 'ABCDF'.indexOf(String(s).toUpperCase()); return i < 0 ? 99 : i; };
         v = order(a.privacy) - order(b.privacy);
+      } else if (sortKey === 'spread') {
+        const av = a.spreadPct !== Infinity ? a.spreadPct : (sortDir > 0 ? Infinity : -Infinity);
+        const bv = b.spreadPct !== Infinity ? b.spreadPct : (sortDir > 0 ? Infinity : -Infinity);
+        v = av - bv;
       } else if (sortKey === 'sell') {
         const av = a.sell ?? (sortDir > 0 ? -Infinity : Infinity);
         const bv = b.sell ?? (sortDir > 0 ? -Infinity : Infinity);
@@ -880,7 +905,7 @@
 
   function renderTable(rows, bestBuy, worstBuy, bestSell, worstSell) {
     if (!rows.length) {
-      bodyEl.innerHTML = `<tr><td colspan="5" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
+      bodyEl.innerHTML = `<tr><td colspan="6" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
       tableFirstRender = true; return;
     }
 
@@ -899,6 +924,7 @@
           <td data-col="privacy" style="text-align:left">${privacyBadge(r.privacy)}</td>
           <td class="${pClass(r.buy,bestBuy,worstBuy)}" data-col="buy">${bT}</td>
           <td class="${pClass(r.sell,bestSell,worstSell)}" data-col="sell">${sT}</td>
+          <td class="${spreadClass(r.spreadPct)}" data-col="spread">${fmtSpread(r.spreadPct)}</td>
           <td class="ts-cell" data-col="ts">${ts}</td>
         </tr>`;
       }).join('');
@@ -927,16 +953,17 @@
       if (!tr) {
         tr = document.createElement('tr');
         tr.dataset.ex = key;
-        tr.innerHTML = `<td>${nameLink(r)}</td><td data-col="privacy" style="text-align:left"></td><td data-col="buy"></td><td data-col="sell"></td><td class="ts-cell" data-col="ts"></td>`;
+        tr.innerHTML = `<td>${nameLink(r)}</td><td data-col="privacy" style="text-align:left"></td><td data-col="buy"></td><td data-col="sell"></td><td data-col="spread"></td><td class="ts-cell" data-col="ts"></td>`;
         bodyEl.appendChild(tr); rowMap.set(key, tr);
       }
 
       applySponsorClass(tr, r.siteName);
 
-      const privacyCell = tr.querySelector('[data-col="privacy"]');
-      const buyCell  = tr.querySelector('[data-col="buy"]');
-      const sellCell = tr.querySelector('[data-col="sell"]');
-      const tsCell   = tr.querySelector('[data-col="ts"]');
+      const privacyCell  = tr.querySelector('[data-col="privacy"]');
+      const buyCell    = tr.querySelector('[data-col="buy"]');
+      const sellCell   = tr.querySelector('[data-col="sell"]');
+      const spreadCell = tr.querySelector('[data-col="spread"]');
+      const tsCell     = tr.querySelector('[data-col="ts"]');
       const bT = (r.buy  !== null && r.buy  >= 1) ? fmt(r.buy)  : '—';
       const sT = (r.sell !== null && r.sell >= 1) ? fmt(r.sell) : '—';
       const bC = pClass(r.buy,  bestBuy,  worstBuy);
@@ -966,6 +993,8 @@
       setCell(sellCell, sT, sC, p.sell, r.sell, r.sell !== null && p.sell !== null && r.sell > p.sell);
 
       privacyCell.innerHTML = privacyBadge(r.privacy);
+      spreadCell.className  = spreadClass(r.spreadPct);
+      spreadCell.textContent = fmtSpread(r.spreadPct);
       tsCell.textContent = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
       prev.set(key, { buy: r.buy, sell: r.sell });
     });
@@ -994,13 +1023,14 @@
       if (!data.length) {
         heroBuyEl.textContent = heroSellEl.textContent = '—';
         heroBuyEx.textContent = heroSellEx.textContent = 'No data';
-        bodyEl.innerHTML = `<tr><td colspan="5" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
+        bodyEl.innerHTML = `<tr><td colspan="6" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
         lastEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
         return;
       }
       const s = computeStats(data);
       lastStats = s;
       renderHero(s.bestBuyRow, s.bestSellRow);
+      updateTitle(s.bestBuyVal, s.bestSellVal);
       renderTable(s.rows, s.bestBuyVal, s.worstBuyVal, s.bestSellVal, s.worstSellVal);
       updateSortHeaders();
       lastEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
