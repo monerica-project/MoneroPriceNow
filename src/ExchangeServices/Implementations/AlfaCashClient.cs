@@ -39,6 +39,8 @@ public sealed class AlfaCashClient : IAlfaCashClient
     public string  SiteName    => _opt.SiteName;
     public string? SiteUrl     => _opt.SiteUrl;
 
+    public char PrivacyLevel => _opt.PrivacyLevel;
+
     public AlfaCashClient(HttpClient http, IOptions<AlfaCashOptions> options)
     {
         _http = http;

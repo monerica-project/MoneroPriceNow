@@ -9,4 +9,5 @@ public sealed class FixedFloatOptions
 
     public string ApiKey { get; set; } = "";
     public string ApiSecret { get; set; } = "";
+    public char PrivacyLevel { get; set; }
 }

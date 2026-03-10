@@ -17,6 +17,7 @@ public sealed class WagyuClient : IWagyuClient
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
 
+    public char PrivacyLevel => opt.PrivacyLevel;
     // simple in-instance cache (rates.xml is max-age=30)
     private readonly object cacheLock = new();
     private DateTimeOffset cacheAtUtc;

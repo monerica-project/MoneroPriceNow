@@ -2,6 +2,6 @@
 
 namespace ExchangeServices.Interfaces;
 
-public interface IOctoSwapClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi
+public interface IOctoSwapClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi, IPrivacyLevel
 {
 }

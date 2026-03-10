@@ -3,7 +3,7 @@ using ExchangeServices.Models;
 
 namespace ExchangeServices.Interfaces;
 
-public interface IXgramClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi
+public interface IXgramClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi, IPrivacyLevel
 {
     string ExchangeKey { get; }
 

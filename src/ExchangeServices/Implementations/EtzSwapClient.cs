@@ -23,6 +23,7 @@ public sealed class EtzSwapClient : IEtzSwapClient
     public string  ExchangeKey => "etzswap";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     public EtzSwapClient(HttpClient http, IOptions<EtzSwapOptions> options)
     {

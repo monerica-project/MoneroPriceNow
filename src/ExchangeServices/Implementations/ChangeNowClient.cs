@@ -17,7 +17,7 @@ public sealed class ChangeNowClient : IChangeNowClient
     public string  ExchangeKey => "changenow";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
-
+    public char PrivacyLevel => opt.PrivacyLevel;
     // Currencies cache
     private readonly object currenciesLock = new();
     private DateTimeOffset currenciesAtUtc;

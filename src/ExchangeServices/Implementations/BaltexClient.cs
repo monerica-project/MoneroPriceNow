@@ -26,7 +26,7 @@ public sealed class BaltexClient : IBaltexClient
     public string  ExchangeKey => "baltex";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
-
+    public char PrivacyLevel => opt.PrivacyLevel;
     public BaltexClient(HttpClient http, IOptions<BaltexOptions> options)
     {
         this.http = http;

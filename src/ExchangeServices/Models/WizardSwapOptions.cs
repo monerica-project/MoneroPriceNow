@@ -16,4 +16,5 @@ public sealed class WizardSwapOptions
 
     public int CurrenciesCacheSeconds { get; set; } = 6 * 60 * 60; // 6 hours
     public string? UserAgent { get; set; } = "ExchangeServices/1.0";
+    public char PrivacyLevel { get; set; }
 }

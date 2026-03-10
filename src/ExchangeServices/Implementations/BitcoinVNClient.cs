@@ -51,7 +51,7 @@ public sealed class BitcoinVNClient : IBitcoinVNClient
     public string ExchangeKey => "bitcoinvn";
     public string SiteName => _opt.SiteName;
     public string? SiteUrl => _opt.SiteUrl;
-
+    public char PrivacyLevel => _opt.PrivacyLevel;
     public BitcoinVNClient(HttpClient http, IOptions<BitcoinVNOptions> options)
     {
         _http = http;

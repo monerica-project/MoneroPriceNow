@@ -23,6 +23,7 @@ public sealed class OctoSwapClient : IOctoSwapClient
     public string  ExchangeKey => "octoswap";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     public OctoSwapClient(HttpClient http, IOptions<OctoSwapOptions> options)
     {

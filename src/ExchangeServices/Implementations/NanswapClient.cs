@@ -23,6 +23,7 @@ public sealed class NanswapClient : INanswapClient
     public string  ExchangeKey => "nanswap";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     public NanswapClient(HttpClient http, IOptions<NanswapOptions> options)
     {

@@ -31,7 +31,7 @@ public sealed class CCECashClient : ICCECashClient
     public string ExchangeKey => "ccecash";
     public string SiteName => _opt.SiteName;
     public string? SiteUrl => _opt.SiteUrl;
-
+    public char PrivacyLevel => _opt.PrivacyLevel;
     public CCECashClient(HttpClient http, IOptions<CCECashOptions> options)
     {
         _http = http;

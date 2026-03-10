@@ -8,6 +8,6 @@ namespace ExchangeServices.Interfaces;
 /// Uses the public v1 API (no auth) by default; upgrades to HMAC-signed v2 when
 /// ApiPublicKey + ApiPrivateKey are configured.
 /// </summary>
-public interface IQuickExClient : IExchangePriceApi, IExchangeBuyPriceApi, IExchangeCurrencyApi
+public interface IQuickExClient : IExchangePriceApi, IExchangeBuyPriceApi, IExchangeCurrencyApi, IPrivacyLevel
 {
 }

@@ -43,7 +43,7 @@ public sealed class GoDexClient : IGoDexClient
     public string  ExchangeKey => "godex";
     public string  SiteName    => _opt.SiteName;
     public string? SiteUrl     => _opt.SiteUrl;
-
+    public char PrivacyLevel => _opt.PrivacyLevel;
     public GoDexClient(HttpClient http, IOptions<GoDexOptions> options)
     {
         _http = http;

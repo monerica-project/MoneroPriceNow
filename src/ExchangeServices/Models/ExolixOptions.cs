@@ -19,4 +19,5 @@ public sealed class ExolixOptions
     public int CurrenciesPageSize { get; set; } = 200;
 
     public string? UserAgent { get; set; }
+    public char PrivacyLevel { get; set; }
 }

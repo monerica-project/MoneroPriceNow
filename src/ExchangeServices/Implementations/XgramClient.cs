@@ -18,6 +18,7 @@ public sealed class XgramClient : IXgramClient
     public string  ExchangeKey => "xgram";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     public XgramClient(HttpClient http, IOptions<XgramOptions> options)
     {

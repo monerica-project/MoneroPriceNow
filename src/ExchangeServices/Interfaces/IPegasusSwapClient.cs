@@ -5,7 +5,7 @@ using System.Text;
 
 namespace ExchangeServices.Interfaces
 { 
-    public interface IPegasusSwapClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi
+    public interface IPegasusSwapClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi, IPrivacyLevel
     {
     }
 }

@@ -2,6 +2,6 @@
 
 namespace ExchangeServices.Interfaces;
 
-public interface IDevilExchangeClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi
+public interface IDevilExchangeClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi, IPrivacyLevel
 {
 }

@@ -26,4 +26,5 @@ public sealed class QuickExOptions
 
     // ── Optional User-Agent ───────────────────────────────────────────────────
     public string? UserAgent { get; set; }
+    public char PrivacyLevel { get; set; }
 }

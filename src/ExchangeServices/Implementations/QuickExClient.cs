@@ -19,6 +19,7 @@ public sealed class QuickExClient : IQuickExClient
     public string ExchangeKey => "quickex";
     public string SiteName => opt.SiteName;
     public string? SiteUrl => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     private readonly object instrumentsLock = new();
     private DateTimeOffset instrumentsAtUtc;

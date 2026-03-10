@@ -7,4 +7,5 @@ public sealed class SwapuzOptions
     public string  SiteName              { get; set; } = "Swapuz";
     public string? SiteUrl               { get; set; } = "https://swapuz.com";
     public int     RequestTimeoutSeconds { get; set; } = 10;
+    public char PrivacyLevel { get; set; }
 }

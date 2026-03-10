@@ -15,5 +15,6 @@ namespace ExchangeServices.Models
 
         public string PublicKey { get; set; } = "";
         public string Secret { get; set; } = "";
+        public char PrivacyLevel { get; set; }
     }
 }

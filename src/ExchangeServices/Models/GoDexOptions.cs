@@ -8,4 +8,5 @@ public sealed class GoDexOptions
     public string  SiteName              { get; set; } = "GoDex";
     public string? SiteUrl               { get; set; } = "https://godex.io";
     public int     RequestTimeoutSeconds { get; set; } = 12;
+    public char PrivacyLevel { get; set; }
 }

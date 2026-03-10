@@ -26,7 +26,7 @@ public sealed class LetsExchangeClient : ILetsExchangeClient
     public string  ExchangeKey => "letsexchange";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
-
+    public char PrivacyLevel => opt.PrivacyLevel;
     public LetsExchangeClient(HttpClient http, IOptions<LetsExchangeOptions> options)
     {
         this.http = http;

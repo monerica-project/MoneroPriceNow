@@ -3,7 +3,7 @@ using ExchangeServices.Models;
 
 namespace ExchangeServices.Interfaces;
 
-public interface ICypherGoatClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi
+public interface ICypherGoatClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi, IPrivacyLevel
 {
     string ExchangeKey { get; }
 

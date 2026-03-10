@@ -10,4 +10,5 @@ public sealed class OctoSwapOptions
 
     // Header: api-key
     public string ApiKey { get; set; } = "";
+    public char PrivacyLevel { get; set; }
 }

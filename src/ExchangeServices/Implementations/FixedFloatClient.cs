@@ -25,6 +25,7 @@ public sealed class FixedFloatClient : IFixedFloatClient
     public string ExchangeKey => "fixedfloat";
     public string SiteName => opt.SiteName;
     public string? SiteUrl => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     public FixedFloatClient(HttpClient http, IOptions<FixedFloatOptions> options)
     {

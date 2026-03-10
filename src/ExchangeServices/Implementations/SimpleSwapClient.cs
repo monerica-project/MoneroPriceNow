@@ -28,6 +28,7 @@ public sealed class SimpleSwapClient : ISimpleSwapClient
     public string ExchangeKey => "simpleswap";
     public string SiteName => _opt.SiteName;
     public string? SiteUrl => _opt.SiteUrl;
+    public char PrivacyLevel => _opt.PrivacyLevel;
 
     private const decimal BuyProbeUsdt = 500m;
     private const decimal SellProbeXmr = 1m;

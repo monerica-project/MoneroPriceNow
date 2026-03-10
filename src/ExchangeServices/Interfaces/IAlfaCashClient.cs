@@ -3,6 +3,6 @@ using ExchangeServices.Interfaces;
 
 namespace ExchangeServices.Interfaces;
 
-public interface IAlfaCashClient : IExchangePriceApi, IExchangeBuyPriceApi, IExchangeCurrencyApi
+public interface IAlfaCashClient : IExchangePriceApi, IExchangeBuyPriceApi, IExchangeCurrencyApi, IPrivacyLevel
 {
 }

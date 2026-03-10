@@ -2,7 +2,6 @@
 
 namespace ExchangeServices.Interfaces;
 
-public interface ILetsExchangeClient : IExchangePriceApi, IExchangeBuyPriceApi, IExchangeCurrencyApi
+public interface ILetsExchangeClient : IExchangePriceApi, IExchangeBuyPriceApi, IExchangeCurrencyApi, IPrivacyLevel
 {
-    string ExchangeKey { get; }
 }

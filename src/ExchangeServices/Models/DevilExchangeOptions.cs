@@ -15,4 +15,5 @@ public sealed class DevilExchangeOptions
     public int RequestTimeoutSeconds { get;  set; }
     public int RetryCount { get;  set; }
     public int QuoteCacheSeconds { get;  set; }
+    public char PrivacyLevel { get; set; }
 }

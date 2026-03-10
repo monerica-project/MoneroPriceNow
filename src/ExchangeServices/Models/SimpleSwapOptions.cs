@@ -8,4 +8,5 @@ public sealed class SimpleSwapOptions
     public string? SiteUrl { get; set; } = "https://simpleswap.io";
     public string? UserAgent { get; set; }
     public int TimeoutSeconds { get; set; } = 10;
+    public char PrivacyLevel { get; set; }
 }

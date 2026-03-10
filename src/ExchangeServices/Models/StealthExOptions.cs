@@ -19,4 +19,5 @@ public sealed class StealthExOptions
 
     // Optional: retry once on timeout
     public int CurrenciesTimeoutRetries { get; set; } = 1;
+    public char PrivacyLevel { get; set; }
 }

@@ -17,7 +17,7 @@ public sealed class StealthExClient : IStealthExClient
     public string ExchangeKey => "stealthex";
     public string SiteName => opt.SiteName;
     public string? SiteUrl => opt.SiteUrl;
-
+    public char PrivacyLevel => opt.PrivacyLevel;
     // Standard 0.4% affiliate fee baked into all API responses.
     // Sell: API gives 0.4% less USDT → true price = api / 0.996
     // Buy:  API gives 0.4% less XMR  → true price = (probe/api_xmr) * 0.996

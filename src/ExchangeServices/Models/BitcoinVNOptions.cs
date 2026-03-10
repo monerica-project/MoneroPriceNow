@@ -7,4 +7,5 @@ public sealed class BitcoinVNOptions
     public string  SiteName              { get; set; } = "BitcoinVN";
     public string? SiteUrl               { get; set; } = "https://bitcoinvn.io";
     public int     RequestTimeoutSeconds { get; set; } = 10;
+    public char PrivacyLevel { get; set; }
 }

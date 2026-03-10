@@ -28,4 +28,5 @@ public sealed class ChangeNowOptions
     public int RetryCount { get; set; } = 2;
 
     public string? UserAgent { get; set; } = "ExchangeServices/1.0";
+    public char PrivacyLevel { get; set; }
 }

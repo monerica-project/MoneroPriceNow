@@ -11,4 +11,5 @@ public sealed class CCECashOptions
     public string? ApiSecret { get; set; }
 
     public int RequestTimeoutSeconds { get; set; } = 10;
+    public char PrivacyLevel { get; set; }
 }

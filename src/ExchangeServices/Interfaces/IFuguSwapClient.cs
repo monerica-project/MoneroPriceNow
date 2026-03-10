@@ -2,6 +2,6 @@
 
 namespace ExchangeServices.Interfaces;
 
-public interface IFuguSwapClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi
+public interface IFuguSwapClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi, IPrivacyLevel
 {
 }

@@ -10,4 +10,5 @@ public sealed class NanswapOptions
 
     // Not required for estimates (only create-order needs it), but keep for future.
     public string? ApiKey { get; set; }
+    public char PrivacyLevel { get; set; }
 }

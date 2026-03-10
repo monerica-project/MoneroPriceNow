@@ -23,7 +23,7 @@ public sealed class FuguSwapClient : IFuguSwapClient
     public string  ExchangeKey => "fuguswap";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
-
+    public char PrivacyLevel => opt.PrivacyLevel;
     public FuguSwapClient(HttpClient http, IOptions<FuguSwapOptions> options)
     {
         this.http = http;

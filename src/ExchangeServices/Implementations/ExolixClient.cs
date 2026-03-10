@@ -16,6 +16,7 @@ public sealed class ExolixClient : IExolixClient
     public string  ExchangeKey => "exolix";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     // Always use float — fixed rates are consistently inflated
     private const string RateTypeFloat = "float";

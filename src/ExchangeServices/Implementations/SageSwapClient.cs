@@ -25,6 +25,7 @@ public sealed class SageSwapClient : ISageSwapClient, IExchangeCurrencyApi
     public string  ExchangeKey => "sageswap";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     public SageSwapClient(HttpClient http, IOptions<SageSwapOptions> options)
     {

@@ -9,4 +9,5 @@ public sealed class FuguSwapOptions
 
     // Required
     public string ApiKey { get; set; } = "";
+    public char PrivacyLevel { get; set; }
 }

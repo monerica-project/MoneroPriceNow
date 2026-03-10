@@ -11,4 +11,5 @@ public sealed class EtzSwapOptions
     public string? ApiKey { get; set; }
     public string? ApiSecretKey { get; set; }
     public string? ApiKeyVersion { get; set; } = "1";
+    public char PrivacyLevel { get; set; }
 }

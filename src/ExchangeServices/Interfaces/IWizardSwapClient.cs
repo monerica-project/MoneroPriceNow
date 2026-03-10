@@ -2,6 +2,6 @@
 
 namespace ExchangeServices.Interfaces;
 
-public interface IWizardSwapClient : IExchangeCurrencyApi, IExchangePriceApi, IExchangeBuyPriceApi
+public interface IWizardSwapClient : IExchangeCurrencyApi, IExchangePriceApi, IExchangeBuyPriceApi, IPrivacyLevel
 {
 }

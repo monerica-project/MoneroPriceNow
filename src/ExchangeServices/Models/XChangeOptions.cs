@@ -7,4 +7,5 @@ public sealed class XChangeOptions
     public string BaseUrl { get; set; } = "https://xchange.me/api/v1";
     public int TimeoutSeconds { get; set; } = 10;
     public string UserAgent { get; set; } = "CryptoPriceNow/1.0";
+    public char PrivacyLevel { get; set; }
 }

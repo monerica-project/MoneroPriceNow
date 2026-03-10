@@ -2,6 +2,6 @@
 
 namespace ExchangeServices.Interfaces;
 
-public interface IXChangeClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi
+public interface IXChangeClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi, IPrivacyLevel
 {
 }

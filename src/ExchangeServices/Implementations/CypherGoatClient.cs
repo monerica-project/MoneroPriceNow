@@ -25,7 +25,7 @@ public sealed class CypherGoatClient : ICypherGoatClient
     public string  ExchangeKey => "cyphergoat";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
-
+    public char PrivacyLevel => opt.PrivacyLevel;
     public CypherGoatClient(HttpClient http, IOptions<CypherGoatOptions> options)
     {
         this.http = http;

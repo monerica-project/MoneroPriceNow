@@ -3,7 +3,7 @@ using ExchangeServices.Abstractions;
 
 namespace ExchangeServices.Interfaces;
 
-public interface ICCECashClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi
+public interface ICCECashClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi, IPrivacyLevel
 {
     string ExchangeKey { get; }
 

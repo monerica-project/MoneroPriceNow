@@ -16,6 +16,7 @@ public sealed class XChangeClient : IXChangeClient
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
 
+    public char PrivacyLevel => opt.PrivacyLevel;
     public XChangeClient(HttpClient http, IOptions<XChangeOptions> options)
     {
         this.http = http;

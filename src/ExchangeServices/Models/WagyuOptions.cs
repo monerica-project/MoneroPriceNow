@@ -15,4 +15,5 @@ public sealed class WagyuOptions
 
     // retries AFTER first attempt (0 = only one attempt)
     public int RetryCount { get; set; } = 2;
+    public char PrivacyLevel { get; set; }
 }

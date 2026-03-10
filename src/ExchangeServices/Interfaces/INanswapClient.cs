@@ -2,7 +2,7 @@
 
 namespace ExchangeServices.Interfaces;
 
-public interface INanswapClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi
+public interface INanswapClient : IExchangePriceApi, IExchangeCurrencyApi, IExchangeBuyPriceApi, IPrivacyLevel
 {
     // No extra members needed; we implement Buy via IExchangePriceApi
     // (assuming your IExchangePriceApi already has GetBuyPriceAsync like your other clients).

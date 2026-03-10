@@ -18,6 +18,7 @@ public sealed class WizardSwapClient : IWizardSwapClient
     public string  ExchangeKey => "wizardswap";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     private readonly object currenciesLock = new();
     private DateTimeOffset currenciesAtUtc;

@@ -14,4 +14,5 @@ public sealed class CypherGoatOptions
     public int RetryCount { get; set; } = 3;
 
     public string? UserAgent { get; set; } = null;
+    public char PrivacyLevel { get; set; }
 }

@@ -1,8 +1,9 @@
-using System.Collections.Concurrent;
 using CryptoPriceNow.Web.Models;
 using ExchangeServices.Abstractions;
+using ExchangeServices.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using System.Collections.Concurrent;
 
 namespace CryptoPriceNow.Services;
 
@@ -96,7 +97,8 @@ public sealed class PriceService : IPriceService
                 SiteUrl: api.SiteUrl,
                 Sell: sellRes?.Price,
                 Buy: buyRes?.Price,
-                TsUtc: ts
+                TsUtc: ts,
+                PrivacyLevel: (api as IPrivacyLevel)?.PrivacyLevel
             );
         });
 

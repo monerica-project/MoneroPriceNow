@@ -20,6 +20,7 @@ public sealed class DevilExchangeClient : IDevilExchangeClient
     public string ExchangeKey => "devilexchange";
     public string SiteName => opt.SiteName;
     public string? SiteUrl => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
     // /pairs cache
     private readonly object pairsLock = new();
     private DateTimeOffset pairsAtUtc;

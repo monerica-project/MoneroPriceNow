@@ -6,5 +6,6 @@ public sealed record TwoWayPriceRow(
     string? SiteUrl,          // affiliate link, e.g. "https://ff.io?ref=..."
     decimal? Sell,
     decimal? Buy,
-    DateTimeOffset? TsUtc
+    DateTimeOffset? TsUtc,
+    char? PrivacyLevel
 );

@@ -13,4 +13,5 @@ public sealed class LetsExchangeOptions
     public int RetryCount { get; set; } = 2;
 
     public string? UserAgent { get; set; } = "CryptoPriceNow/1.0";
+    public char PrivacyLevel { get; set; }
 }

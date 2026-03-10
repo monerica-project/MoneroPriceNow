@@ -18,6 +18,7 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
     public string  ExchangeKey => "pegasusswap";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
+    public char PrivacyLevel => opt.PrivacyLevel;
 
     // typeSwap=2 → float (typeSwap=1 is fixed — DO NOT USE for price comparison)
     private const string TypeSwapFloat = "2";

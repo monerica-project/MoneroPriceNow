@@ -238,6 +238,28 @@
     border-left: 2px solid var(--xmr-orange);
   }
 
+
+  /* ─── Privacy level badge ─── */
+  .privacy-badge {
+    display: inline-block;
+    width: 1.5em; height: 1.5em;
+    line-height: 1.5em;
+    text-align: center;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+  .privacy-A { background: rgba(62,207,142,.15); color: #3ecf8e; border: 1px solid rgba(62,207,142,.3); }
+  .privacy-B { background: rgba(100,210,120,.12); color: #6bd48a; border: 1px solid rgba(100,210,120,.25); }
+  .privacy-C { background: rgba(255,200,60,.12);  color: #f5c842; border: 1px solid rgba(255,200,60,.25); }
+  .privacy-D { background: rgba(255,140,58,.12);  color: var(--xmr-orange2); border: 1px solid rgba(255,140,58,.25); }
+  .privacy-F { background: rgba(255,91,91,.12);   color: var(--bad); border: 1px solid rgba(255,91,91,.25); }
+  .privacy-  { color: var(--text-muted); font-size: .65rem; }
+  th[data-sort="privacy"] { text-align: left; padding-left: 1.1rem; }
+  td[data-col="privacy"]  { padding-left: 1.1rem; }
+
   /* ─── Skeleton shimmer ─── */
   @@keyframes shimmer {
     0%   { background-position: -600px 0; }
@@ -460,20 +482,21 @@
     <thead>
       <tr>
         <th class="th-sort" data-sort="name">Exchange <span class="sort-arrow"></span></th>
+        <th class="th-sort" data-sort="privacy">Privacy <span class="sort-arrow"></span></th>
         <th class="th-sort" data-sort="buy">Buy ($ per XMR) <span class="sort-arrow"></span></th>
         <th class="th-sort" data-sort="sell">Sell ($ per XMR) <span class="sort-arrow"></span></th>
         <th>Updated</th>
       </tr>
     </thead>
     <tbody id="pricesBody">
-      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:110px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:75px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:95px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:80px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:100px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:88px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:110px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:75px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:95px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:80px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:100px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+      <tr class="skel-row"><td><span class="skel skel-name" style="width:88px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
     </tbody>
   </table>
 </div>
@@ -506,14 +529,19 @@
 <script>
 (() => {
   // ── DOM refs ──────────────────────────────────────────────────────
-  const bodyEl     = document.getElementById('pricesBody');
-  const lastEl     = document.getElementById('lastUpdated');
-  const heroBuyEl  = document.getElementById('heroBuy');
-  const heroBuyEx  = document.getElementById('heroBuyEx');
-  const heroSellEl = document.getElementById('heroSell');
-  const heroSellEx = document.getElementById('heroSellEx');
-  const ringEl     = document.getElementById('ringFill');
-  const countEl    = document.getElementById('countdownText');
+  const bodyEl       = document.getElementById('pricesBody');
+  const lastEl       = document.getElementById('lastUpdated');
+  const heroBuyEl    = document.getElementById('heroBuy');
+  const heroBuyEx    = document.getElementById('heroBuyEx');
+  const heroSellEl   = document.getElementById('heroSell');
+  const heroSellEx   = document.getElementById('heroSellEx');
+  const ringEl       = document.getElementById('ringFill');
+  const countEl      = document.getElementById('countdownText');
+  const pairLabelEl  = document.getElementById('pairLabel');
+  const thBuyEl      = document.getElementById('thBuy');
+  const thSellEl     = document.getElementById('thSell');
+  const explainerBuy  = document.getElementById('explainerBuy');
+  const explainerSell = document.getElementById('explainerSell');
 
   const INTERVAL = 15_000;
   const CIRCUMF  = 37.7;
@@ -707,7 +735,8 @@
       siteUrl:  siteUrl  || null,
       sell:     num(pick(x,'sell','Sell','sellPrice','SellPrice')),
       buy:      num(pick(x,'buy','Buy','buyPrice','BuyPrice')),
-      tsUtc:    pick(x,'tsUtc','TsUtc','ts','Ts','timestamp','Timestamp')
+      tsUtc:    pick(x,'tsUtc','TsUtc','ts','Ts','timestamp','Timestamp'),
+      privacy:  pick(x,'privacyLevel','PrivacyLevel','privacy','Privacy') ?? null
     };
   }
 
@@ -721,6 +750,12 @@
     return href
       ? `<a class="ex-name" href="${href}" target="_blank" rel="${rel}">${n}</a>`
       : `<span class="ex-name">${n}</span>`;
+  }
+
+  function privacyBadge(p) {
+    if (!p) return '<span class="privacy-badge privacy-">—</span>';
+    const l = String(p).toUpperCase().charAt(0);
+    return `<span class="privacy-badge privacy-${l}">${l}</span>`;
   }
 
   function heroSubHtml(row, verb) {
@@ -752,7 +787,12 @@
     });
 
     // Note: actual sort order is applied in sortedRows() based on user's chosen column.
-    const visibleRows = rows.filter(r => r.buy !== null || r.sell !== null);
+    // Only show a row if at least one price would actually display (>= 1).
+    // Rows where both are null/zero/sub-1 are hidden until a real price returns.
+    const visibleRows = rows.filter(r =>
+      (r.buy  !== null && r.buy  >= 1) ||
+      (r.sell !== null && r.sell >= 1)
+    );
 
     return {
       rows: visibleRows, bestBuyRow, bestSellRow,
@@ -780,6 +820,9 @@
         const av = a.buy  ?? (sortDir > 0 ? Infinity : -Infinity);
         const bv = b.buy  ?? (sortDir > 0 ? Infinity : -Infinity);
         v = av - bv;
+      } else if (sortKey === 'privacy') {
+        const order = s => { if (!s) return 99; const i = 'ABCDF'.indexOf(String(s).toUpperCase()); return i < 0 ? 99 : i; };
+        v = order(a.privacy) - order(b.privacy);
       } else if (sortKey === 'sell') {
         const av = a.sell ?? (sortDir > 0 ? -Infinity : Infinity);
         const bv = b.sell ?? (sortDir > 0 ? -Infinity : Infinity);
@@ -837,7 +880,7 @@
 
   function renderTable(rows, bestBuy, worstBuy, bestSell, worstSell) {
     if (!rows.length) {
-      bodyEl.innerHTML = `<tr><td colspan="4" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
+      bodyEl.innerHTML = `<tr><td colspan="5" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
       tableFirstRender = true; return;
     }
 
@@ -853,6 +896,7 @@
         const ts = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
         return `<tr class="data-row${sponsorCls}" data-ex="${esc(key)}">
           <td>${nameLink(r)}</td>
+          <td data-col="privacy" style="text-align:left">${privacyBadge(r.privacy)}</td>
           <td class="${pClass(r.buy,bestBuy,worstBuy)}" data-col="buy">${bT}</td>
           <td class="${pClass(r.sell,bestSell,worstSell)}" data-col="sell">${sT}</td>
           <td class="ts-cell" data-col="ts">${ts}</td>
@@ -883,12 +927,13 @@
       if (!tr) {
         tr = document.createElement('tr');
         tr.dataset.ex = key;
-        tr.innerHTML = `<td>${nameLink(r)}</td><td data-col="buy"></td><td data-col="sell"></td><td class="ts-cell" data-col="ts"></td>`;
+        tr.innerHTML = `<td>${nameLink(r)}</td><td data-col="privacy" style="text-align:left"></td><td data-col="buy"></td><td data-col="sell"></td><td class="ts-cell" data-col="ts"></td>`;
         bodyEl.appendChild(tr); rowMap.set(key, tr);
       }
 
       applySponsorClass(tr, r.siteName);
 
+      const privacyCell = tr.querySelector('[data-col="privacy"]');
       const buyCell  = tr.querySelector('[data-col="buy"]');
       const sellCell = tr.querySelector('[data-col="sell"]');
       const tsCell   = tr.querySelector('[data-col="ts"]');
@@ -920,6 +965,7 @@
       setCell(buyCell,  bT, bC, p.buy,  r.buy,  r.buy  !== null && p.buy  !== null && r.buy  < p.buy);
       setCell(sellCell, sT, sC, p.sell, r.sell, r.sell !== null && p.sell !== null && r.sell > p.sell);
 
+      privacyCell.innerHTML = privacyBadge(r.privacy);
       tsCell.textContent = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
       prev.set(key, { buy: r.buy, sell: r.sell });
     });
@@ -948,7 +994,7 @@
       if (!data.length) {
         heroBuyEl.textContent = heroSellEl.textContent = '—';
         heroBuyEx.textContent = heroSellEx.textContent = 'No data';
-        bodyEl.innerHTML = `<tr><td colspan="4" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
+        bodyEl.innerHTML = `<tr><td colspan="5" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
         lastEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
         return;
       }
