@@ -207,7 +207,8 @@
 
   .price-good { color: var(--good)  !important; font-weight: 600; }
   .price-bad  { color: var(--bad)   !important; font-weight: 600; }
-  .ts-cell { font-size: .68rem; color: var(--text-muted); }
+  .ts-cell { font-size: .68rem; color: var(--text-muted); cursor: default; }
+  .ts-cell[title] { text-decoration: underline dotted rgba(122,106,90,.4); }
 
   @@keyframes flashGood { 0% { background: rgba(62,207,142,.18); } 100% { background: transparent; } }
   @@keyframes flashBad  { 0% { background: rgba(255,91,91,.18); }  100% { background: transparent; } }
@@ -260,10 +261,7 @@
   th[data-sort="privacy"] { text-align: left; padding-left: 1.1rem; }
   td[data-col="privacy"]  { padding-left: 1.1rem; }
 
-  /* ─── Spread column ─── */
   td[data-col="spread"] { color: var(--text-muted); font-size: .8rem; }
-  .spread-tight { color: var(--good)   !important; }
-  .spread-wide  { color: var(--bad)    !important; }
 
   /* ─── Skeleton shimmer ─── */
   @@keyframes shimmer {
@@ -726,12 +724,7 @@
   function num(v)  { const n = Number(v); return Number.isFinite(n) ? n : null; }
   function fmt(n)  { const x = Number(n); return Number.isFinite(x) ? '$' + x.toFixed(2) : '—'; }
   function eq(a,b) { return a !== null && b !== null && Math.abs(a - b) < EPS; }
-  function spreadClass(pct) {
-    if (pct === Infinity || pct == null) return '';
-    if (pct < 0.01) return 'spread-tight';
-    if (pct > 0.04) return 'spread-wide';
-    return '';
-  }
+
   function fmtSpread(pct) {
     if (pct === Infinity || pct == null) return '—';
     return (pct * 100).toFixed(2) + '%';
@@ -919,13 +912,14 @@
         const bT = (r.buy  !== null && r.buy  >= 1) ? fmt(r.buy)  : '—';
         const sT = (r.sell !== null && r.sell >= 1) ? fmt(r.sell) : '—';
         const ts = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
+        const tsTitle = r.tsUtc ? (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date(r.tsUtc)) : '';
         return `<tr class="data-row${sponsorCls}" data-ex="${esc(key)}">
           <td>${nameLink(r)}</td>
           <td data-col="privacy" style="text-align:left">${privacyBadge(r.privacy)}</td>
           <td class="${pClass(r.buy,bestBuy,worstBuy)}" data-col="buy">${bT}</td>
           <td class="${pClass(r.sell,bestSell,worstSell)}" data-col="sell">${sT}</td>
-          <td class="${spreadClass(r.spreadPct)}" data-col="spread">${fmtSpread(r.spreadPct)}</td>
-          <td class="ts-cell" data-col="ts">${ts}</td>
+          <td class="" data-col="spread">${fmtSpread(r.spreadPct)}</td>
+          <td class="ts-cell" data-col="ts" title="${tsTitle}">${ts}</td>
         </tr>`;
       }).join('');
       tableFirstRender = false;
@@ -993,9 +987,9 @@
       setCell(sellCell, sT, sC, p.sell, r.sell, r.sell !== null && p.sell !== null && r.sell > p.sell);
 
       privacyCell.innerHTML = privacyBadge(r.privacy);
-      spreadCell.className  = spreadClass(r.spreadPct);
       spreadCell.textContent = fmtSpread(r.spreadPct);
       tsCell.textContent = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
+      tsCell.title = r.tsUtc ? (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date(r.tsUtc)) : '';
       prev.set(key, { buy: r.buy, sell: r.sell });
     });
 
@@ -1025,6 +1019,8 @@
         heroBuyEx.textContent = heroSellEx.textContent = 'No data';
         bodyEl.innerHTML = `<tr><td colspan="6" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
         lastEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+      lastEl.title = (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date());
+        lastEl.title = (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date());
         return;
       }
       const s = computeStats(data);
@@ -1034,6 +1030,7 @@
       renderTable(s.rows, s.bestBuyVal, s.worstBuyVal, s.bestSellVal, s.worstSellVal);
       updateSortHeaders();
       lastEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+      lastEl.title = (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date());
     } catch (err) {
       console.error('[MoneroPriceNow] Refresh error:', err);
       lastEl.textContent = 'Update failed (retrying…)';
