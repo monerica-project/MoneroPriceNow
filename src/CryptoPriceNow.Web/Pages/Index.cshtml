@@ -541,11 +541,6 @@
   const heroSellEx   = document.getElementById('heroSellEx');
   const ringEl       = document.getElementById('ringFill');
   const countEl      = document.getElementById('countdownText');
-  const pairLabelEl  = document.getElementById('pairLabel');
-  const thBuyEl      = document.getElementById('thBuy');
-  const thSellEl     = document.getElementById('thSell');
-  const explainerBuy  = document.getElementById('explainerBuy');
-  const explainerSell = document.getElementById('explainerSell');
 
   const INTERVAL = 15_000;
   const CIRCUMF  = 37.7;
@@ -1020,7 +1015,6 @@
         bodyEl.innerHTML = `<tr><td colspan="6" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
         lastEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
       lastEl.title = (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date());
-        lastEl.title = (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date());
         return;
       }
       const s = computeStats(data);
@@ -1056,8 +1050,9 @@
     });
   });
 
-  // ── Boot: load sponsors once, then start price loop ───────────────
-  loadSponsors().then(() => refresh().then(scheduleNext));
+  // ── Boot: kick off sponsors + prices in parallel so first paint is fast ──
+  loadSponsors();
+  refresh().then(scheduleNext);
 })();
 </script>
 
