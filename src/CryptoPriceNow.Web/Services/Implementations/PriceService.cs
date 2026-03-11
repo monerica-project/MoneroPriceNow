@@ -76,30 +76,51 @@ public sealed class PriceService : IPriceService
         AssetRef baseRef, AssetRef quoteRef, CancellationToken ct = default)
         => GetTwoWayPricesInternalAsync(baseRef, quoteRef, ct);
 
+    // Per-exchange timeout: if an exchange API hangs, we return null for that
+    // exchange rather than blocking the entire response indefinitely.
+    private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
+
     private async Task<IReadOnlyList<TwoWayPriceRow>> GetTwoWayPricesInternalAsync(
         AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
     {
         var tasks = this.priceApis.Select(async api =>
         {
-            var sellRes = await GetOneExchangeSellAsync(api, baseRef, quoteRef, ct);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(ExchangeTimeout);
 
-            var buyRes = api is IExchangeBuyPriceApi buyApi
-                ? await GetOneExchangeBuyAsync(api.ExchangeKey, buyApi, baseRef, quoteRef, ct)
-                : null;
+            try
+            {
+                var sellRes = await GetOneExchangeSellAsync(api, baseRef, quoteRef, cts.Token);
 
-            var ts = sellRes?.TimestampUtc;
-            if (buyRes is not null && (ts is null || buyRes.TimestampUtc > ts.Value))
-                ts = buyRes.TimestampUtc;
+                var buyRes = api is IExchangeBuyPriceApi buyApi
+                    ? await GetOneExchangeBuyAsync(api.ExchangeKey, buyApi, baseRef, quoteRef, cts.Token)
+                    : null;
 
-            return new TwoWayPriceRow(
-                Exchange: api.ExchangeKey,
-                SiteName: api.SiteName,
-                SiteUrl: api.SiteUrl,
-                Sell: sellRes?.Price,
-                Buy: buyRes?.Price,
-                TsUtc: ts,
-                PrivacyLevel: (api as IPrivacyLevel)?.PrivacyLevel
-            );
+                var ts = sellRes?.TimestampUtc;
+                if (buyRes is not null && (ts is null || buyRes.TimestampUtc > ts.Value))
+                    ts = buyRes.TimestampUtc;
+
+                return new TwoWayPriceRow(
+                    Exchange: api.ExchangeKey,
+                    SiteName: api.SiteName,
+                    SiteUrl: api.SiteUrl,
+                    Sell: sellRes?.Price,
+                    Buy: buyRes?.Price,
+                    TsUtc: ts,
+                    PrivacyLevel: (api as IPrivacyLevel)?.PrivacyLevel
+                );
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // This exchange timed out — return a row with nulls so the rest still render
+                return new TwoWayPriceRow(
+                    Exchange: api.ExchangeKey,
+                    SiteName: api.SiteName,
+                    SiteUrl: api.SiteUrl,
+                    Sell: null, Buy: null, TsUtc: null,
+                    PrivacyLevel: (api as IPrivacyLevel)?.PrivacyLevel
+                );
+            }
         });
 
         var rows = await Task.WhenAll(tasks);
