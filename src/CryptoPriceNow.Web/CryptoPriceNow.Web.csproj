@@ -7,7 +7,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="wwwroot\css\moneropricenow.css" />
+    <None Include="wwwroot\js\moneropricenow.js" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ExchangeServices\ExchangeServices.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Pages\css\" />
+    <Folder Include="Pages\js\" />
   </ItemGroup>
 
 </Project>

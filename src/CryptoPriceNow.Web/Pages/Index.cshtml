@@ -4,1055 +4,115 @@
     ViewData["Title"] = "MoneroPriceNow.com — Live XMR / USDT Prices";
 }
 
-<style>
-  @@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;600;700;900&display=swap');
+<link rel="stylesheet" href="~/css/moneropricenow.css" asp-append-version="true" />
 
-  :root {
-    --xmr-orange:   #F26822;
-    --xmr-orange2:  #ff8c3a;
-    --surface2:     #1a1108;
-    --surface3:     #241808;
-    --border:       rgba(242,104,34,.16);
-    --border-hi:    rgba(242,104,34,.38);
-    --text:         #ddd4c4;
-    --text-muted:   #7a6a5a;
-    --good:         #3ecf8e;
-    --bad:          #ff5b5b;
-    --mono:         'IBM Plex Mono', monospace;
-    --sans:         'Barlow', sans-serif;
-  }
-
-  .pair-label {
-    max-width: 900px;
-    margin: 0 auto .5rem;
-    font-family: var(--mono);
-    font-size: .68rem;
-    letter-spacing: .15em;
-    color: var(--xmr-orange);
-    text-transform: uppercase;
-  }
-
-  /* ─── Bottom explainer cards ─── */
-  .explainer-section {
-    max-width: 900px;
-    margin: 1.75rem auto 0;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: .75rem;
-  }
-  .explainer-card {
-    font-family: var(--mono);
-    font-size: .62rem;
-    line-height: 1.6;
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: .75rem 1rem;
-  }
-  .explainer-card strong { color: var(--text); }
-  .ec-title {
-    display: block;
-    font-size: .65rem;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--xmr-orange);
-    margin-bottom: .3rem;
-  }
-
-  /* ─── Countdown ring ─── */
-  .countdown-wrap {
-    display: flex; align-items: center; gap: .5rem; margin-left: auto;
-  }
-  .countdown-ring {
-    position: relative; width: 16px; height: 16px; flex-shrink: 0;
-  }
-  .countdown-ring svg { transform: rotate(-90deg); }
-  .countdown-ring circle { fill: none; stroke-width: 2; }
-  .ring-bg   { stroke: rgba(242,104,34,.15); }
-  .ring-fill { stroke: var(--xmr-orange2); stroke-linecap: round;
-               transition: stroke-dashoffset .95s linear; }
-  #countdownText {
-    font-family: var(--mono); font-size: .67rem; color: var(--text-muted);
-    display: inline-block; width: 2.2ch; text-align: right;
-  }
-
-  /* ─── Hero: giant prices ─── */
-  .price-hero {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 1rem 0 1.5rem;
-    display: grid;
-    grid-template-columns: 1fr 1px 1fr;
-    align-items: center;
-  }
-  .divider-v {
-    background: var(--border-hi);
-    height: 80px;
-    align-self: center;
-  }
-  .price-block { padding: 0 2rem; }
-  .price-block:first-child { padding-left: 0; }
-  .price-block:last-child  { text-align: right; padding-right: 0; }
-
-  .price-label {
-    font-family: var(--mono);
-    font-size: .63rem;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: .15rem;
-  }
-  .price-label-sub {
-    font-family: var(--mono);
-    font-size: .58rem;
-    color: var(--text-muted);
-    opacity: .7;
-    margin-bottom: .3rem;
-    letter-spacing: .04em;
-  }
-  .price-big {
-    font-family: var(--sans);
-    font-size: clamp(2.4rem, 6vw, 4rem);
-    font-weight: 900;
-    line-height: 1;
-    letter-spacing: -.02em;
-  }
-  .price-big.buy-color  { color: var(--good); }
-  .price-big.sell-color { color: var(--xmr-orange2); }
-
-  .price-sub {
-    font-family: var(--mono);
-    font-size: .72rem;
-    color: var(--text-muted);
-    margin-top: .3rem;
-  }
-  .price-sub a {
-    color: var(--xmr-orange2);
-    text-decoration: none;
-    font-weight: 600;
-  }
-  .price-sub a:hover { text-decoration: underline; }
-  .price-sub strong { color: var(--text); }
-
-  /* ─── Status bar ─── */
-  .status-bar {
-    max-width: 900px;
-    margin: 0 auto .85rem;
-    font-family: var(--mono);
-    font-size: .67rem;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: .45rem;
-    border-top: 1px solid var(--border);
-    padding-top: .85rem;
-  }
-  .pulse-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--good); flex-shrink: 0;
-    animation: pulseDot 2s ease-in-out infinite;
-  }
-  @@keyframes pulseDot {
-    0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(62,207,142,.5); }
-    50%      { opacity:.6; box-shadow: 0 0 0 5px rgba(62,207,142,0); }
-  }
-
-  /* ─── Table ─── */
-  .table-wrap {
-    max-width: 900px; margin: 0 auto;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow-x: auto;            /* horizontal scroll on mobile */
-    overflow-y: hidden;          /* prevent vertical scrollbar flash during DOM reorder */
-    -webkit-overflow-scrolling: touch;
-  }
-  table { width: 100%; min-width: 520px; border-collapse: collapse; }
-  thead tr {
-    background: var(--surface3);
-    border-bottom: 1px solid var(--border-hi);
-  }
-  th {
-    padding: .65rem 1rem;
-    font-family: var(--mono); font-size: .62rem;
-    letter-spacing: .14em; text-transform: uppercase;
-    color: var(--text-muted); font-weight: 400; text-align: left;
-  }
-  th:not(:first-child) { text-align: right; }
-
-  tbody tr {
-    border-bottom: 1px solid rgba(242,104,34,.06);
-    transition: background .12s;
-  }
-  tbody tr:last-child { border-bottom: none; }
-  tbody tr:hover { background: rgba(242,104,34,.04); }
-
-  td {
-    padding: .72rem 1rem;
-    font-family: var(--mono); font-size: .88rem; color: var(--text);
-  }
-  td:not(:first-child) { text-align: right; }
-
-  a.ex-name {
-    color: var(--text); font-size: .88rem; text-decoration: none;
-    transition: color .15s;
-  }
-  a.ex-name:hover { color: var(--xmr-orange2); }
-  a.ex-name::after {
-    content: ' ↗'; font-size: .6rem;
-    opacity: 0; color: var(--xmr-orange); transition: opacity .15s;
-  }
-  a.ex-name:hover::after { opacity: 1; }
-  span.ex-name { color: var(--text); font-size: .88rem; }
-
-  .price-good { color: var(--good)  !important; font-weight: 600; }
-  .price-bad  { color: var(--bad)   !important; font-weight: 600; }
-  .ts-cell { font-size: .68rem; color: var(--text-muted); cursor: default; }
-  .ts-cell[title] { text-decoration: underline dotted rgba(122,106,90,.4); }
-
-  @@keyframes flashGood { 0% { background: rgba(62,207,142,.18); } 100% { background: transparent; } }
-  @@keyframes flashBad  { 0% { background: rgba(255,91,91,.18); }  100% { background: transparent; } }
-  .flash-good { animation: flashGood 900ms ease-out forwards; border-radius: 4px; }
-  .flash-bad  { animation: flashBad  900ms ease-out forwards; border-radius: 4px; }
-
-  /* ─── Sponsor row highlight ─── */
-  /* ── Sortable headers ───────────────────────────────────────────── */
-  .th-sort {
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-  }
-  .th-sort:hover { color: var(--xmr-orange); }
-  .th-sort.sort-active { color: var(--xmr-orange); }
-  .sort-arrow { display: inline-block; width: 1em; text-align: center; font-size: .75em; opacity: .4; }
-  .th-sort.sort-active .sort-arrow { opacity: 1; }
-
-  tbody tr.is-sponsor {
-    box-shadow: inset 0 0 0 1px rgba(242,104,34,.55),
-                inset 0 0 12px rgba(242,104,34,.06);
-    background: rgba(242,104,34,.04);
-  }
-  tbody tr.is-sponsor:hover {
-    background: rgba(242,104,34,.08);
-  }
-  tbody tr.is-sponsor td:first-child {
-    border-left: 2px solid var(--xmr-orange);
-  }
-
-
-  /* ─── Privacy level badge ─── */
-  .privacy-badge {
-    display: inline-block;
-    width: 1.5em; height: 1.5em;
-    line-height: 1.5em;
-    text-align: center;
-    border-radius: 4px;
-    font-family: var(--mono);
-    font-size: .72rem;
-    font-weight: 600;
-    letter-spacing: 0;
-  }
-  .privacy-A { background: rgba(62,207,142,.15); color: #3ecf8e; border: 1px solid rgba(62,207,142,.3); }
-  .privacy-B { background: rgba(58,130,246,.12);  color: #60a5fa; border: 1px solid rgba(58,130,246,.25); }
-  .privacy-C { background: rgba(255,200,60,.12);  color: #f5c842; border: 1px solid rgba(255,200,60,.25); }
-  .privacy-D { background: rgba(255,140,58,.12);  color: var(--xmr-orange2); border: 1px solid rgba(255,140,58,.25); }
-  .privacy-F { background: rgba(255,91,91,.12);   color: var(--bad); border: 1px solid rgba(255,91,91,.25); }
-  .privacy-  { color: var(--text-muted); font-size: .65rem; }
-  th[data-sort="privacy"] { text-align: left; padding-left: 1.1rem; }
-  td[data-col="privacy"]  { padding-left: 1.1rem; }
-
-  td[data-col="spread"] { color: var(--text-muted); font-size: .8rem; }
-
-  /* ─── Skeleton shimmer ─── */
-  @@keyframes shimmer {
-    0%   { background-position: -600px 0; }
-    100% { background-position:  600px 0; }
-  }
-  .skel {
-    display: inline-block;
-    border-radius: 5px;
-    background: linear-gradient(
-      90deg,
-      rgba(242,104,34,.07) 0%,
-      rgba(242,104,34,.22) 40%,
-      rgba(242,104,34,.07) 80%
-    );
-    background-size: 600px 100%;
-    animation: shimmer 1.4s ease-in-out infinite;
-  }
-  .skel-price { width: 200px; height: 56px; border-radius: 6px; }
-  .skel-sub   { width: 120px; height: 13px; border-radius: 4px; margin-top: .45rem; }
-  .skel-row td { padding: .72rem 1rem; }
-  .skel-name  { width: 90px;  height: 14px; border-radius: 4px; }
-  .skel-num   { width: 72px;  height: 14px; border-radius: 4px; margin-left: auto; }
-  .skel-ts    { width: 55px;  height: 12px; border-radius: 4px; margin-left: auto; }
-  .skel-row:nth-child(1) .skel { animation-delay: 0s; }
-  .skel-row:nth-child(2) .skel { animation-delay: .12s; }
-  .skel-row:nth-child(3) .skel { animation-delay: .24s; }
-  .skel-row:nth-child(4) .skel { animation-delay: .36s; }
-  .skel-row:nth-child(5) .skel { animation-delay: .48s; }
-  .skel-row:nth-child(6) .skel { animation-delay: .60s; }
-  .skel-row:nth-child(7) .skel { animation-delay: .72s; }
-  .skel-row:nth-child(8) .skel { animation-delay: .84s; }
-
-  @@keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  .data-row { animation: fadeInUp 220ms ease-out both; }
-  .data-row:nth-child(1)  { animation-delay: 0ms; }
-  .data-row:nth-child(2)  { animation-delay: 30ms; }
-  .data-row:nth-child(3)  { animation-delay: 60ms; }
-  .data-row:nth-child(4)  { animation-delay: 90ms; }
-  .data-row:nth-child(5)  { animation-delay: 120ms; }
-  .data-row:nth-child(6)  { animation-delay: 150ms; }
-  .data-row:nth-child(7)  { animation-delay: 180ms; }
-  .data-row:nth-child(8)  { animation-delay: 210ms; }
-  .data-row:nth-child(9)  { animation-delay: 240ms; }
-  .data-row:nth-child(10) { animation-delay: 270ms; }
-  .data-row:nth-child(11) { animation-delay: 300ms; }
-  .data-row:nth-child(12) { animation-delay: 330ms; }
-
-  @@keyframes heroReveal {
-    0%   { opacity: 0; transform: translateY(12px) scale(.96); filter: blur(4px); }
-    100% { opacity: 1; transform: translateY(0)    scale(1);   filter: blur(0); }
-  }
-  .hero-revealed { animation: heroReveal 380ms cubic-bezier(.22,.68,0,1.2) both; }
-
-  @@media (max-width: 540px) {
-    .price-hero           { grid-template-columns: 1fr; gap: .75rem; padding-top: .25rem; }
-    .explainer-section    { grid-template-columns: 1fr; }
-    .divider-v            { display: none; }
-    .price-block:last-child { text-align: left; padding-left: 0; }
-    .pair-label           { margin-top: 0; }
-  }
-
-  /* ─── Disclosure ──────────────────────────────────────────────── */
-  .disclosure {
-    max-width: 900px; margin: 1.5rem auto 0;
-    font-family: var(--mono); font-size: .62rem;
-    color: var(--text-muted); text-align: center;
-    line-height: 1.6;
-    border-top: 1px solid var(--border);
-    padding-top: 1rem;
-  }
-  .disclosure a { color: var(--xmr-orange2); text-decoration: none; }
-  .disclosure a:hover { text-decoration: underline; }
-
-  /* ─── Sponsor section ─────────────────────────────────────────── */
-  .sponsor-section {
-    max-width: 900px; margin: 1.5rem auto 2.5rem;
-  }
-  .sponsor-section-title {
-    font-family: var(--mono);
-    font-size: .63rem;
-    letter-spacing: .14em;
-    text-transform: uppercase;
-    color: var(--xmr-orange);
-    margin-bottom: 1rem;
-  }
-  .sponsor-tier {
-    margin-bottom: 1.5rem;
-  }
-  .sponsor-tier-label {
-    font-family: var(--mono);
-    font-size: .58rem;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: .6rem;
-    padding-bottom: .3rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .sponsor-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: .75rem;
-  }
-  .sponsor-card {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: .85rem 1rem;
-    transition: border-color .15s, transform .15s;
-  }
-  .sponsor-card:hover {
-    border-color: var(--border-hi);
-    transform: translateY(-1px);
-  }
-  .sponsor-card-name {
-    font-family: var(--sans);
-    font-size: .95rem;
-    font-weight: 700;
-    color: var(--text);
-  }
-  .sponsor-card-name a {
-    color: var(--text);
-    text-decoration: none;
-  }
-  .sponsor-card-name a:hover { color: var(--xmr-orange2); }
-  .sponsor-card-rating {
-    font-family: var(--mono);
-    font-size: .62rem;
-    color: var(--text-muted);
-    margin-top: .25rem;
-    display: flex;
-    align-items: center;
-    gap: .35rem;
-  }
-  .stars-wrap { display: inline-block; position: relative; font-size: .85em; letter-spacing: .05em; line-height: 1; }
-  .stars-empty { color: rgba(242,104,34,.25); }
-  .stars-fill  { position: absolute; top: 0; left: 0; overflow: hidden; white-space: nowrap; color: var(--xmr-orange); }
-  .sponsor-card-rating a { color: var(--xmr-orange2); text-decoration: none; }
-  .sponsor-card-rating a:hover { text-decoration: underline; }
-  .sponsor-card-desc {
-    font-family: var(--mono);
-    font-size: .65rem;
-    color: var(--text-muted);
-    line-height: 1.55;
-    margin-top: .5rem;
-  }
-  .sponsor-card-note {
-    font-family: var(--mono);
-    font-size: .6rem;
-    color: var(--xmr-orange);
-    margin-top: .3rem;
-    opacity: .85;
-  }
-  .sponsor-card-expiry {
-    font-family: var(--mono);
-    font-size: .58rem;
-    color: var(--text-muted);
-    margin-top: .4rem;
-    opacity: .6;
-  }
-  #sponsorSection { display: none; }
-
-  @@media (max-width: 540px) {
-    .sponsor-grid { grid-template-columns: 1fr; }
-  }
-
-  @@media (max-width: 768px) {
-    tbody tr.is-sponsor td:first-child {
-      border-left: 3px solid var(--xmr-orange);
-    }
-    tbody tr.is-sponsor {
-      box-shadow: inset 0 0 0 1px rgba(242,104,34,.7),
-                  inset 0 0 16px rgba(242,104,34,.1);
-      background: rgba(242,104,34,.07);
-    }
-    tbody tr.is-sponsor:hover {
-      background: rgba(242,104,34,.12);
-    }
-  }
-</style>
-
-<div class="pair-label">XMR / USDT (TRC20) &nbsp;·&nbsp; Real-time floating rates</div>
+<div class="pair-label">Live XMR instant swap rates &nbsp;·&nbsp; No KYC &nbsp;·&nbsp; USDT (TRC20)</div>
 
 <div class="price-hero">
-  <div class="price-block">
-    <div class="price-label">Best Buy Price</div>
-    <div class="price-label-sub">USD you pay per 1 XMR</div>
-    <div class="price-big buy-color" id="heroBuy"><span class="skel skel-price"></span></div>
-    <div class="price-sub" id="heroBuyEx"><span class="skel skel-sub"></span></div>
-  </div>
-  <div class="divider-v"></div>
-  <div class="price-block">
-    <div class="price-label">Best Sell Price</div>
-    <div class="price-label-sub">USD you receive per 1 XMR</div>
-    <div class="price-big sell-color" id="heroSell"><span class="skel skel-price"></span></div>
-    <div class="price-sub" id="heroSellEx"><span class="skel skel-sub" style="margin-left:auto"></span></div>
-  </div>
-</div>
 
-<div class="status-bar">
-  <div class="pulse-dot"></div>
-  <span id="lastUpdated">Fetching prices…</span>
-  <div class="countdown-wrap">
-    <div class="countdown-ring">
-      <svg width="16" height="16" viewBox="0 0 16 16">
-        <circle class="ring-bg"   cx="8" cy="8" r="6"/>
-        <circle class="ring-fill" cx="8" cy="8" r="6" id="ringFill"
-                stroke-dasharray="37.7" stroke-dashoffset="0"/>
-      </svg>
+    <!-- Left: Avg Buy -->
+    <div class="hero-side hero-left">
+        <div class="hs-label">Avg Buy Price</div>
+        <div class="hs-price buy-color" id="heroAvgBuy">
+            <span class="skel" style="width:120px;height:36px;border-radius:5px"></span>
+        </div>
+        <div class="hs-sub">
+            <span class="hs-arrow buy-arr">▼</span>
+            <span id="heroAvgBuyN">USDT → XMR · you pay per XMR</span>
+        </div>
     </div>
-    <span id="countdownText">15s</span>
-  </div>
+
+    <!-- Center: Market Price -->
+    <div class="hero-center">
+        <div class="hc-eyebrow">XMR / USDT</div>
+        <div class="hc-price" id="heroMid">
+            <span class="skel" style="width:180px;height:64px;border-radius:6px;display:inline-block"></span>
+        </div>
+        <div class="hc-badge">Market Price</div>
+        <div class="hc-sub" id="heroMidSub"></div>
+    </div>
+
+    <!-- Right: Avg Sell -->
+    <div class="hero-side hero-right">
+        <div class="hs-label">Avg Sell Price</div>
+        <div class="hs-price sell-color" id="heroAvgSell">
+            <span class="skel" style="width:120px;height:36px;border-radius:5px"></span>
+        </div>
+        <div class="hs-sub">
+            <span class="hs-arrow sell-arr">▲</span>
+            <span id="heroAvgSellN">XMR → USDT · you receive per XMR</span>
+        </div>
+    </div>
+
 </div>
 
+<!-- Status bar -->
+<div class="status-bar">
+    <div class="pulse-dot"></div>
+    <span id="lastUpdated">Fetching prices…</span>
+    <div class="tick-track" id="tickTrack"></div>
+    <div class="countdown-wrap">
+        <div class="countdown-ring">
+            <svg width="16" height="16" viewBox="0 0 16 16">
+                <circle class="ring-bg" cx="8" cy="8" r="6" />
+                <circle class="ring-fill" cx="8" cy="8" r="6" id="ringFill"
+                        stroke-dasharray="37.7" stroke-dashoffset="0" />
+            </svg>
+        </div>
+        <span id="countdownText">15s</span>
+    </div>
+</div>
+
+<!-- Price table -->
 <div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th class="th-sort" data-sort="name">Exchange <span class="sort-arrow"></span></th>
-        <th class="th-sort" data-sort="privacy">Privacy <span class="sort-arrow"></span></th>
-        <th class="th-sort" data-sort="buy">Buy ($ per XMR) <span class="sort-arrow"></span></th>
-        <th class="th-sort" data-sort="sell">Sell ($ per XMR) <span class="sort-arrow"></span></th>
-        <th class="th-sort" data-sort="spread">Spread <span class="sort-arrow"></span></th>
-        <th>Updated</th>
-      </tr>
-    </thead>
-    <tbody id="pricesBody">
-      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:110px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:75px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:95px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:80px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:100px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-      <tr class="skel-row"><td><span class="skel skel-name" style="width:88px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-    </tbody>
-  </table>
+    <table>
+        <thead>
+            <tr>
+                <th class="th-sort" data-sort="name">Exchange <span class="sort-arrow"></span></th>
+                <th class="th-sort" data-sort="privacy">Privacy <span class="sort-arrow"></span></th>
+                <th class="th-sort" data-sort="buy">Buy ($ per XMR) <span class="sort-arrow"></span></th>
+                <th class="th-sort" data-sort="sell">Sell ($ per XMR) <span class="sort-arrow"></span></th>
+                <th class="th-sort" data-sort="spread">Spread <span class="sort-arrow"></span></th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody id="pricesBody">
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name" style="width:110px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name" style="width:75px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name" style="width:95px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name" style="width:80px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name" style="width:100px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name" style="width:88px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+        </tbody>
+    </table>
 </div>
 
+<!-- Explainer cards -->
 <div class="explainer-section">
-  <div class="explainer-card">
-    <span class="ec-title">&#x25BC; Buy price — lower is better</span>
-    The <strong>buy price</strong> is how many <strong>$USD (USDT)</strong> you must spend to receive <strong>1 XMR</strong>.
-    A lower buy price means a cheaper exchange. The best buy is highlighted in green.
-  </div>
-  <div class="explainer-card">
-    <span class="ec-title">&#x25B2; Sell price — higher is better</span>
-    The <strong>sell price</strong> is how many <strong>$USD (USDT)</strong> you receive when you send <strong>1 XMR</strong>.
-    A higher sell price means more value back. The best sell is highlighted in green.
-  </div>
+    <div class="explainer-card">
+        <span class="ec-title">&#x25BC; Buy price — lower is better</span>
+        The <strong>buy price</strong> is how many <strong>$USD (USDT)</strong> you must spend to receive <strong>1 XMR</strong>.
+        A lower buy price means a cheaper exchange. The best buy is highlighted in green.
+    </div>
+    <div class="explainer-card">
+        <span class="ec-title">&#x25B2; Sell price — higher is better</span>
+        The <strong>sell price</strong> is how many <strong>$USD (USDT)</strong> you receive when you send <strong>1 XMR</strong>.
+        A higher sell price means more value back. The best sell is highlighted in green.
+    </div>
 </div>
 
-<!-- ── Disclosure ─────────────────────────────────────────────────── -->
+<!-- Disclosure -->
 <div class="disclosure">
-  Prices are indicative floating rates.&nbsp;&nbsp;
-  Some links on this page may be affiliate links in which we may earn a commission.
+    Prices are indicative floating rates.&nbsp;&nbsp;
+    Some links on this page may be affiliate links in which we may earn a commission.
 </div>
 
-<!-- ── Sponsor section (rendered from /api/sponsors) ─────────────── -->
+<!-- Sponsor section -->
 <div class="sponsor-section" id="sponsorSection">
-  <div class="sponsor-section-title">&#x2605; Sponsors</div>
-  <div id="sponsorTiers"></div>
+    <div class="sponsor-section-title">&#x2605; Sponsors</div>
+    <div id="sponsorTiers"></div>
 </div>
 
-<script>
-(() => {
-  // ── DOM refs ──────────────────────────────────────────────────────
-  const bodyEl       = document.getElementById('pricesBody');
-  const lastEl       = document.getElementById('lastUpdated');
-  const heroBuyEl    = document.getElementById('heroBuy');
-  const heroBuyEx    = document.getElementById('heroBuyEx');
-  const heroSellEl   = document.getElementById('heroSell');
-  const heroSellEx   = document.getElementById('heroSellEx');
-  const ringEl       = document.getElementById('ringFill');
-  const countEl      = document.getElementById('countdownText');
-
-  const INTERVAL = 15_000;
-  const CIRCUMF  = 37.7;
-  const EPS      = 1e-9;
-
-  const prev       = new Map();
-  const flashTimers = new WeakMap();  // cell el → pending flash timer id
-  let heroFirstRender  = true;
-  let tableFirstRender = true;
-
-  // ── Sort state ───────────────────────────────────────────────────────
-  // sortKey: null (default spread sort), 'name', 'buy', 'sell'
-  // sortDir: 1 = asc/low-first  -1 = desc/high-first
-  let sortKey = null;
-  let sortDir = 1;
-  let lastStats = null;   // cached so re-sort doesn't need a fetch
-
-  // ── Sponsor data (fetched once on load) ──────────────────────────
-  const sponsorKeys = new Set();        // norm keys for table highlight
-  const sponsorLinks = new Map();       // normName -> direct sponsor link
-  let   sponsorData = [];               // full objects for sponsor section
-
-  function normName(s) {
-    return String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  }
-
-  async function loadSponsors() {
-    try {
-      const res = await fetch('/api/sponsors', { cache: 'no-store' });
-      if (!res.ok) { console.warn('[MoneroPriceNow] Sponsor fetch HTTP', res.status); return; }
-      const data = await res.json();
-      const now  = Date.now();
-      sponsorKeys.clear();
-      sponsorData = [];
-      for (const s of data) {
-        const exp = s.expirationDate ? new Date(s.expirationDate).getTime() : Infinity;
-        if (s.name) {
-          const nk = normName(s.name);
-          sponsorKeys.add(nk);
-          if (s.link) sponsorLinks.set(nk, s.link);
-          if (exp > now) sponsorData.push({ ...s, _exp: exp });
-        }
-      }
-      // Sort: tier order first, then within each tier: longest expiration first
-      const TIER_ORDER = ['MainSponsor','CategorySponsor','SubCategorySponsor','SubSponsor'];
-      sponsorData.sort((a,b) => {
-        const ta = TIER_ORDER.indexOf(a.sponsorshipType);
-        const tb = TIER_ORDER.indexOf(b.sponsorshipType);
-        const tierDiff = (ta < 0 ? 99 : ta) - (tb < 0 ? 99 : tb);
-        if (tierDiff !== 0) return tierDiff;
-        // Same tier: later expiry first (descending)
-        return b._exp - a._exp;
-      });
-      console.log('[MoneroPriceNow] Sponsors loaded:', [...sponsorKeys]);
-      renderSponsorSection();
-    } catch (e) {
-      console.warn('[MoneroPriceNow] Could not load sponsor list:', e);
-    }
-  }
-
-  // ── Star rating helper ────────────────────────────────────────────
-  function starHtml(rating) {
-    if (rating == null) return '';
-    const pct = Math.round((rating / 5) * 100);
-    return `<span class="stars-wrap">` +
-      `<span class="stars-empty">★★★★★</span>` +
-      `<span class="stars-fill" style="width:${pct}%">★★★★★</span>` +
-      `</span>`;
-  }
-
-  // ── Render sponsor cards below the disclosure ─────────────────────
-  function renderSponsorSection() {
-    const section  = document.getElementById('sponsorSection');
-    const tiersEl  = document.getElementById('sponsorTiers');
-    if (!section || !tiersEl || !sponsorData.length) return;
-
-    // Group by sponsorshipType
-    const groups = new Map();
-    for (const s of sponsorData) {
-      const key = s.sponsorshipType ?? 'Other';
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(s);
-    }
-
-    // Pretty tier label
-    function tierLabel(key) {
-      if (key === 'MainSponsor')         return 'Main Sponsors';
-      if (key === 'CategorySponsor')     return 'Category Sponsors';
-      if (key === 'SubSponsor')          return 'Sub Sponsors';
-      // Handle any capitalisation variant of subcategory
-      const norm = key.replace(/[-_\s]/g,'').toLowerCase();
-      if (norm === 'subcategorysponsor') return 'Subcategory Sponsors';
-      return key.replace(/([A-Z])/g, ' $1').trim(); // fallback: split CamelCase
-    }
-
-    // Tier order
-    const ORDER = ['MainSponsor','CategorySponsor','SubSponsor'];
-    const sortedGroups = [...groups.keys()].sort((a,b) => {
-      const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
-      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-    });
-
-    tiersEl.innerHTML = sortedGroups.map(tierKey => {
-      const sponsors = groups.get(tierKey);
-      const cards = sponsors.map(s => {
-        const link    = esc(s.link ?? '');
-        const name    = esc(s.name ?? '');
-        const desc    = esc(s.description ?? '');
-        const note    = s.note ? esc(s.note) : '';
-        const rating  = s.reviewRating;
-        const count   = s.reviewCount ?? 0;
-        const revLink = esc(s.reviewLink ?? '');
-
-        const ratingHtml = (rating != null && count > 0)
-          ? `<div class="sponsor-card-rating">
-              ${starHtml(rating)}
-              <span>${rating.toFixed(1)}</span>
-              <a href="${revLink}" target="_blank" rel="noopener">(${count} review${count !== 1 ? 's' : ''})</a>
-             </div>`
-          : '';
-
-        const expDate = new Date(s.expirationDate);
-        const expStr  = expDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-        return `<div class="sponsor-card">
-          <div class="sponsor-card-name"><a href="${link}" target="_blank" rel="noopener sponsored">${name}</a></div>
-          ${ratingHtml}
-          ${desc ? `<div class="sponsor-card-desc">${desc}</div>` : ''}
-          ${note ? `<div class="sponsor-card-note">${note}</div>` : ''}
-          <div class="sponsor-card-expiry">Sponsored until ${expStr}</div>
-        </div>`;
-      }).join('');
-
-      return `<div class="sponsor-tier">
-        <div class="sponsor-tier-label">${tierLabel(tierKey)}</div>
-        <div class="sponsor-grid">${cards}</div>
-      </div>`;
-    }).join('');
-
-    section.style.display = 'block';
-  }
-
-  function isSponsor(siteName) {
-    return !!siteName && sponsorKeys.has(normName(siteName));
-  }
-
-  // ── Timer ─────────────────────────────────────────────────────────
-  let refreshAt  = Date.now() + INTERVAL;
-  let refreshTid = null;
-
-  function scheduleNext() {
-    clearTimeout(refreshTid);
-    refreshAt  = Date.now() + INTERVAL;
-    refreshTid = setTimeout(doRefresh, INTERVAL);
-  }
-
-  async function doRefresh() {
-    await refresh();
-    scheduleNext();
-  }
-
-  setInterval(() => {
-    const rem  = Math.max(0, refreshAt - Date.now());
-    const secs = Math.ceil(rem / 1000);
-    ringEl.style.strokeDashoffset = CIRCUMF * (1 - rem / INTERVAL);
-    countEl.textContent = secs + 's';
-  }, 250);
-
-  // ── Helpers ───────────────────────────────────────────────────────
-  function esc(s) {
-    return String(s ?? '')
-      .replaceAll('&','&amp;').replaceAll('<','&lt;')
-      .replaceAll('>','&gt;').replaceAll('"','&quot;')
-      .replaceAll("'",'&#39;');
-  }
-  function num(v)  { const n = Number(v); return Number.isFinite(n) ? n : null; }
-  function fmt(n)  { const x = Number(n); return Number.isFinite(x) ? '$' + x.toFixed(2) : '—'; }
-  function eq(a,b) { return a !== null && b !== null && Math.abs(a - b) < EPS; }
-
-  function fmtSpread(pct) {
-    if (pct === Infinity || pct == null) return '—';
-    return (pct * 100).toFixed(2) + '%';
-  }
-  function updateTitle(buy, sell) {
-    const b = (buy  !== null && buy  >= 1) ? '$' + buy.toFixed(2)  : '—';
-    const s = (sell !== null && sell >= 1) ? '$' + sell.toFixed(2) : '—';
-    document.title = b + ' / ' + s + ' · MoneroPriceNow.com';
-  }
-  function pick(obj, ...keys) {
-    for (const k of keys) { const v = obj[k]; if (v !== undefined && v !== null && v !== '') return v; }
-    return null;
-  }
-
-  function mapRow(x) {
-    const siteName    = pick(x,'siteName','SiteName','displayName','DisplayName','name','Name','label','Label');
-    const siteUrl     = pick(x,'siteUrl','SiteUrl','url','Url','affiliateUrl','AffiliateUrl','link','Link');
-    const exchangeKey = pick(x,'exchange','Exchange','key','Key','id','Id') ?? '?';
-    return {
-      exchange: exchangeKey,
-      siteName: siteName || exchangeKey,
-      siteUrl:  siteUrl  || null,
-      sell:     num(pick(x,'sell','Sell','sellPrice','SellPrice')),
-      buy:      num(pick(x,'buy','Buy','buyPrice','BuyPrice')),
-      tsUtc:    pick(x,'tsUtc','TsUtc','ts','Ts','timestamp','Timestamp'),
-      privacy:  pick(x,'privacyLevel','PrivacyLevel','privacy','Privacy') ?? null
-    };
-  }
-
-  function nameLink(row) {
-    const n    = esc(row.siteName);
-    const sKey = normName(row.siteName);
-    const href = sponsorLinks.has(sKey)
-      ? esc(sponsorLinks.get(sKey))          // sponsor: use direct link, no affiliate
-      : row.siteUrl ? esc(row.siteUrl) : null;
-    const rel  = sponsorLinks.has(sKey) ? 'noopener sponsored' : 'noopener sponsored';
-    return href
-      ? `<a class="ex-name" href="${href}" target="_blank" rel="${rel}">${n}</a>`
-      : `<span class="ex-name">${n}</span>`;
-  }
-
-  function privacyBadge(p) {
-    if (!p) return '<span class="privacy-badge privacy-">—</span>';
-    const l = String(p).toUpperCase().charAt(0);
-    return `<span class="privacy-badge privacy-${l}">${l}</span>`;
-  }
-
-  function heroSubHtml(row, verb) {
-    if (!row) return 'loading…';
-    const n    = esc(row.siteName);
-    const sKey = normName(row.siteName);
-    const href = sponsorLinks.has(sKey)
-      ? esc(sponsorLinks.get(sKey))
-      : row.siteUrl ? esc(row.siteUrl) : null;
-    return href
-      ? `${verb} on <a href="${href}" target="_blank" rel="noopener sponsored">${n}</a>`
-      : `${verb} on <strong>${n}</strong>`;
-  }
-
-  function computeStats(rawData) {
-    const rows     = rawData.map(mapRow);
-    const withBuy  = rows.filter(r => r.buy  !== null && r.buy  >= 1);
-    const withSell = rows.filter(r => r.sell !== null && r.sell >= 1);
-    const bestBuyRow  = withBuy.length  ? withBuy.reduce( (a,b) => b.buy  < a.buy  ? b : a) : null;
-    const bestSellRow = withSell.length ? withSell.reduce((a,b) => b.sell > a.sell ? b : a) : null;
-
-    rows.forEach(r => {
-      if (r.buy !== null && r.sell !== null && r.buy >= 1 && r.sell >= 1) {
-        r.spreadAbs = r.buy - r.sell;
-        r.spreadPct = r.spreadAbs >= 0 ? r.spreadAbs / r.buy : Infinity;
-      } else {
-        r.spreadAbs = r.spreadPct = Infinity;
-      }
-    });
-
-    // Note: actual sort order is applied in sortedRows() based on user's chosen column.
-    // Only show a row if at least one price would actually display (>= 1).
-    // Rows where both are null/zero/sub-1 are hidden until a real price returns.
-    const visibleRows = rows.filter(r =>
-      (r.buy  !== null && r.buy  >= 1) ||
-      (r.sell !== null && r.sell >= 1)
-    );
-
-    return {
-      rows: visibleRows, bestBuyRow, bestSellRow,
-      bestBuyVal:   withBuy.length  ? Math.min(...withBuy.map(r=>r.buy))   : null,
-      worstBuyVal:  withBuy.length  ? Math.max(...withBuy.map(r=>r.buy))   : null,
-      bestSellVal:  withSell.length ? Math.max(...withSell.map(r=>r.sell)) : null,
-      worstSellVal: withSell.length ? Math.min(...withSell.map(r=>r.sell)) : null,
-    };
-  }
-
-  // ── Sort ─────────────────────────────────────────────────────────
-  function sortedRows(rows) {
-    if (!sortKey) {
-      // Default: spread ascending (best deals first)
-      return [...rows].sort((a,b) =>
-        a.spreadPct !== b.spreadPct ? a.spreadPct - b.spreadPct :
-        a.spreadAbs !== b.spreadAbs ? a.spreadAbs - b.spreadAbs :
-        a.exchange.localeCompare(b.exchange));
-    }
-    return [...rows].sort((a,b) => {
-      let v;
-      if (sortKey === 'name') {
-        v = (a.siteName ?? '').localeCompare(b.siteName ?? '');
-      } else if (sortKey === 'buy') {
-        const av = a.buy  ?? (sortDir > 0 ? Infinity : -Infinity);
-        const bv = b.buy  ?? (sortDir > 0 ? Infinity : -Infinity);
-        v = av - bv;
-      } else if (sortKey === 'privacy') {
-        const order = s => { if (!s) return 99; const i = 'ABCDF'.indexOf(String(s).toUpperCase()); return i < 0 ? 99 : i; };
-        v = order(a.privacy) - order(b.privacy);
-      } else if (sortKey === 'spread') {
-        const av = a.spreadPct !== Infinity ? a.spreadPct : (sortDir > 0 ? Infinity : -Infinity);
-        const bv = b.spreadPct !== Infinity ? b.spreadPct : (sortDir > 0 ? Infinity : -Infinity);
-        v = av - bv;
-      } else if (sortKey === 'sell') {
-        const av = a.sell ?? (sortDir > 0 ? -Infinity : Infinity);
-        const bv = b.sell ?? (sortDir > 0 ? -Infinity : Infinity);
-        v = av - bv;
-      }
-      return v * sortDir;
-    });
-  }
-
-  function updateSortHeaders() {
-    document.querySelectorAll('.th-sort').forEach(th => {
-      const arrow = th.querySelector('.sort-arrow');
-      if (th.dataset.sort === sortKey) {
-        th.classList.add('sort-active');
-        arrow.textContent = sortDir > 0 ? ' ▲' : ' ▼';
-      } else {
-        th.classList.remove('sort-active');
-        arrow.textContent = '';
-      }
-    });
-  }
-
-  // ── Hero ──────────────────────────────────────────────────────────
-  function animateCountUp(el, target) {
-    const start = target * 0.92, dur = 600, t0 = performance.now();
-    el.classList.remove('hero-revealed'); void el.offsetWidth; el.classList.add('hero-revealed');
-    (function step(now) {
-      const p = Math.min((now - t0) / dur, 1), e = 1 - Math.pow(1-p,3);
-      el.textContent = fmt(start + (target - start) * e);
-      p < 1 ? requestAnimationFrame(step) : (el.textContent = fmt(target));
-    })(performance.now());
-  }
-
-  function renderHero(buy, sell) {
-    const first = heroFirstRender; heroFirstRender = false;
-    if (buy)  { first ? animateCountUp(heroBuyEl,  buy.buy)   : (heroBuyEl.textContent  = fmt(buy.buy));   heroBuyEx.innerHTML  = heroSubHtml(buy,  'Buy'); }
-    else      { heroBuyEl.textContent  = '—'; heroBuyEx.textContent  = 'No data'; }
-    if (sell) { first ? animateCountUp(heroSellEl, sell.sell) : (heroSellEl.textContent = fmt(sell.sell)); heroSellEx.innerHTML = heroSubHtml(sell, 'Sell'); }
-    else      { heroSellEl.textContent = '—'; heroSellEx.textContent = 'No data'; }
-  }
-
-  // ── Table ─────────────────────────────────────────────────────────
-  function pClass(val, best, worst) {
-    if (val === null || val < 1) return '';
-    return eq(val,best) ? 'price-good' : eq(val,worst) ? 'price-bad' : '';
-  }
-
-  function applySponsorClass(tr, siteName) {
-    if (isSponsor(siteName)) {
-      tr.classList.add('is-sponsor');
-    } else {
-      tr.classList.remove('is-sponsor');
-    }
-  }
-
-  function renderTable(rows, bestBuy, worstBuy, bestSell, worstSell) {
-    if (!rows.length) {
-      bodyEl.innerHTML = `<tr><td colspan="6" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
-      tableFirstRender = true; return;
-    }
-
-    const sorted = sortedRows(rows);
-
-    if (tableFirstRender) {
-      bodyEl.innerHTML = sorted.map(r => {
-        const key       = r.exchange.trim().toLowerCase();
-        const sponsorCls = isSponsor(r.siteName) ? ' is-sponsor' : '';
-        prev.set(key, { buy: r.buy, sell: r.sell });
-        const bT = (r.buy  !== null && r.buy  >= 1) ? fmt(r.buy)  : '—';
-        const sT = (r.sell !== null && r.sell >= 1) ? fmt(r.sell) : '—';
-        const ts = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
-        const tsTitle = r.tsUtc ? (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date(r.tsUtc)) : '';
-        return `<tr class="data-row${sponsorCls}" data-ex="${esc(key)}">
-          <td>${nameLink(r)}</td>
-          <td data-col="privacy" style="text-align:left">${privacyBadge(r.privacy)}</td>
-          <td class="${pClass(r.buy,bestBuy,worstBuy)}" data-col="buy">${bT}</td>
-          <td class="${pClass(r.sell,bestSell,worstSell)}" data-col="sell">${sT}</td>
-          <td class="" data-col="spread">${fmtSpread(r.spreadPct)}</td>
-          <td class="ts-cell" data-col="ts" title="${tsTitle}">${ts}</td>
-        </tr>`;
-      }).join('');
-      tableFirstRender = false;
-      // Strip fadeInUp class after animations complete so reorders never retrigger it
-      setTimeout(() => {
-        bodyEl.querySelectorAll('tr.data-row').forEach(tr => tr.classList.remove('data-row'));
-      }, 450);
-      return;
-    }
-
-    const rowMap = new Map();
-    bodyEl.querySelectorAll('tr[data-ex]').forEach(tr => rowMap.set(tr.dataset.ex, tr));
-
-    const visibleKeys = new Set(rows.map(r => r.exchange.trim().toLowerCase()));
-    rowMap.forEach((tr, key) => {
-      if (!visibleKeys.has(key)) {
-        tr.remove(); rowMap.delete(key); prev.delete(key);
-      }
-    });
-
-    sorted.forEach(r => {
-      const key = r.exchange.trim().toLowerCase();
-      const p   = prev.get(key) || { buy: null, sell: null };
-      let   tr  = rowMap.get(key);
-      if (!tr) {
-        tr = document.createElement('tr');
-        tr.dataset.ex = key;
-        tr.innerHTML = `<td>${nameLink(r)}</td><td data-col="privacy" style="text-align:left"></td><td data-col="buy"></td><td data-col="sell"></td><td data-col="spread"></td><td class="ts-cell" data-col="ts"></td>`;
-        bodyEl.appendChild(tr); rowMap.set(key, tr);
-      }
-
-      applySponsorClass(tr, r.siteName);
-
-      const privacyCell  = tr.querySelector('[data-col="privacy"]');
-      const buyCell    = tr.querySelector('[data-col="buy"]');
-      const sellCell   = tr.querySelector('[data-col="sell"]');
-      const spreadCell = tr.querySelector('[data-col="spread"]');
-      const tsCell     = tr.querySelector('[data-col="ts"]');
-      const bT = (r.buy  !== null && r.buy  >= 1) ? fmt(r.buy)  : '—';
-      const sT = (r.sell !== null && r.sell >= 1) ? fmt(r.sell) : '—';
-      const bC = pClass(r.buy,  bestBuy,  worstBuy);
-      const sC = pClass(r.sell, bestSell, worstSell);
-
-      // Cancel any pending flash timer before touching the cell,
-      // preventing a stale timeout from overwriting the class we're about to set.
-      function setCell(cell, newText, baseClass, oldVal, newVal, better) {
-        const tid = flashTimers.get(cell);
-        if (tid != null) { clearTimeout(tid); flashTimers.delete(cell); }
-
-        const valueChanged  = newText !== cell.textContent;
-        const realChange    = oldVal !== null && newVal !== null && !eq(newVal, oldVal);
-        const shouldFlash   = valueChanged && realChange;
-        const flashCls      = shouldFlash ? (better ? 'flash-good' : 'flash-bad') : '';
-
-        cell.className      = [flashCls, baseClass].filter(Boolean).join(' ');
-        cell.textContent    = newText;
-
-        if (flashCls) {
-          const t = setTimeout(() => { cell.className = baseClass; flashTimers.delete(cell); }, 950);
-          flashTimers.set(cell, t);
-        }
-      }
-
-      setCell(buyCell,  bT, bC, p.buy,  r.buy,  r.buy  !== null && p.buy  !== null && r.buy  < p.buy);
-      setCell(sellCell, sT, sC, p.sell, r.sell, r.sell !== null && p.sell !== null && r.sell > p.sell);
-
-      privacyCell.innerHTML = privacyBadge(r.privacy);
-      spreadCell.textContent = fmtSpread(r.spreadPct);
-      tsCell.textContent = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '—';
-      tsCell.title = r.tsUtc ? (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date(r.tsUtc)) : '';
-      prev.set(key, { buy: r.buy, sell: r.sell });
-    });
-
-    // Only reorder DOM rows if their order actually changed — avoids
-    // unnecessary reflows and any animation/scrollbar side-effects.
-    const currentOrder = [...bodyEl.querySelectorAll('tr[data-ex]')].map(tr => tr.dataset.ex);
-    const desiredOrder = sorted.map(r => r.exchange.trim().toLowerCase());
-    const orderChanged = currentOrder.length !== desiredOrder.length ||
-                         currentOrder.some((k, i) => k !== desiredOrder[i]);
-    if (orderChanged) {
-      desiredOrder.forEach(key => {
-        const tr = bodyEl.querySelector(`tr[data-ex="${key}"]`);
-        if (tr) bodyEl.appendChild(tr);
-      });
-    }
-  }
-
-  // ── Fetch ─────────────────────────────────────────────────────────
-  async function refresh() {
-    try {
-      const res  = await fetch('/api/prices/two-way?base=XMR&quote=USDTTRC', { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if (!Array.isArray(data)) throw new Error('Bad JSON');
-      if (!data.length) {
-        heroBuyEl.textContent = heroSellEl.textContent = '—';
-        heroBuyEx.textContent = heroSellEx.textContent = 'No data';
-        bodyEl.innerHTML = `<tr><td colspan="6" style="padding:1.5rem 1rem;color:var(--text-muted);">No prices available.</td></tr>`;
-        lastEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
-      lastEl.title = (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date());
-        return;
-      }
-      const s = computeStats(data);
-      lastStats = s;
-      renderHero(s.bestBuyRow, s.bestSellRow);
-      updateTitle(s.bestBuyVal, s.bestSellVal);
-      renderTable(s.rows, s.bestBuyVal, s.worstBuyVal, s.bestSellVal, s.worstSellVal);
-      updateSortHeaders();
-      lastEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
-      lastEl.title = (d => d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC')(new Date());
-    } catch (err) {
-      console.error('[MoneroPriceNow] Refresh error:', err);
-      lastEl.textContent = 'Update failed (retrying…)';
-    }
-  }
-
-  // ── Sort header click handler ────────────────────────────────────
-  document.querySelectorAll('.th-sort').forEach(th => {
-    th.addEventListener('click', () => {
-      const col = th.dataset.sort;
-      if (sortKey === col) {
-        sortDir = -sortDir;             // same column → flip direction
-      } else {
-        sortKey = col;
-        // sensible defaults: buy asc (low=good), sell desc (high=good), name asc
-        sortDir = col === 'sell' ? -1 : 1;
-      }
-      updateSortHeaders();
-      if (lastStats) {
-        renderTable(lastStats.rows, lastStats.bestBuyVal, lastStats.worstBuyVal,
-                    lastStats.bestSellVal, lastStats.worstSellVal);
-      }
-    });
-  });
-
-  // ── Boot: kick off sponsors + prices in parallel so first paint is fast ──
-  loadSponsors();
-  refresh().then(scheduleNext);
-})();
-</script>
-
+<script src="~/js/moneropricenow.js" asp-append-version="true"></script>

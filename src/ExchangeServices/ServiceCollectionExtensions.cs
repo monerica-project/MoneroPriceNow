@@ -36,9 +36,10 @@ public static class ServiceCollectionExtensions
         services.AddGoDex(config);
         services.AddChangee(config);
         services.AddAlfaCash(config);
+        services.AddBitcoinVN(config);
 
 
-        // services.AddBitcoinVN(config);
+        //  
 
         //services.AddQuickEx(config); // auth issues
 
@@ -46,7 +47,7 @@ public static class ServiceCollectionExtensions
         //services.AddSwapuz(config);
 
 
-        //  services.AddXgram(config);
+        //   services.AddXgram(config);
         // services.AddNanswap(config);
 
 
