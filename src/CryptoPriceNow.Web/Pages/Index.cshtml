@@ -10,6 +10,16 @@
 
 <div class="price-hero">
 
+    <!-- Center: Market Price (first in DOM = top on mobile) -->
+    <div class="hero-center">
+        <div class="hc-eyebrow">XMR / USDT</div>
+        <div class="hc-price" id="heroMid">
+            <span class="skel" style="width:180px;height:64px;border-radius:6px;display:inline-block"></span>
+        </div>
+        <div class="hc-badge">Market Price</div>
+        <div class="hc-sub" id="heroMidSub"></div>
+    </div>
+
     <!-- Left: Avg Buy -->
     <div class="hero-side hero-left">
         <div class="hs-label">Avg Buy Price</div>
@@ -20,16 +30,6 @@
             <span class="hs-arrow buy-arr">▼</span>
             <span id="heroAvgBuyN">USDT → XMR · you pay per XMR</span>
         </div>
-    </div>
-
-    <!-- Center: Market Price -->
-    <div class="hero-center">
-        <div class="hc-eyebrow">XMR / USDT</div>
-        <div class="hc-price" id="heroMid">
-            <span class="skel" style="width:180px;height:64px;border-radius:6px;display:inline-block"></span>
-        </div>
-        <div class="hc-badge">Market Price</div>
-        <div class="hc-sub" id="heroMidSub"></div>
     </div>
 
     <!-- Right: Avg Sell -->

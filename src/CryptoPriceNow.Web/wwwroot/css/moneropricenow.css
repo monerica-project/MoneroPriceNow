@@ -84,7 +84,10 @@
   text-align: center;
   padding: .5rem 1rem;
   position: relative;
+  order: 2; /* center visually between left and right on desktop */
 }
+.hero-side.hero-left  { order: 1; }
+.hero-side.hero-right { order: 3; }
 .hero-center::before,
 .hero-center::after {
   content: '';
@@ -441,15 +444,28 @@ tbody tr.is-sponsor td:first-child { border-left: 2px solid var(--xmr-orange); }
 #sponsorSection { display: none; }
 
 /* ─── Mobile ─── */
-@media (max-width: 540px) {
-  .price-hero       { grid-template-columns: 1fr; gap: .6rem; }
-  .hero-side        { align-items: center; text-align: center; }
-  .hero-side .hs-sub { justify-content: center; }
+@media (max-width: 600px) {
+  .price-hero {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: .75rem .5rem;
+  }
+  /* Center spans full width, sits on top */
+  .hero-center {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    order: unset;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: .75rem;
+  }
   .hero-center::before, .hero-center::after { display: none; }
-  .hero-center      { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: .75rem .5rem; }
+  /* Buy left, sell right on second row */
+  .hero-side.hero-left  { grid-column: 1; grid-row: 2; align-items: flex-start; text-align: left; order: unset; }
+  .hero-side.hero-right { grid-column: 2; grid-row: 2; order: unset; }
+  .hero-side.hero-left .hs-sub { justify-content: flex-start; }
   .explainer-section { grid-template-columns: 1fr; }
-  .pair-label       { margin-top: 0; }
-  .sponsor-grid     { grid-template-columns: 1fr; }
+  .pair-label        { margin-top: 0; }
+  .sponsor-grid      { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
