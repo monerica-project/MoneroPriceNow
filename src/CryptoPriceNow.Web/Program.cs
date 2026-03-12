@@ -11,13 +11,10 @@ builder.Services.AddHttpClient();
 // Registers exchange clients + options binding
 builder.Services.AddCryptoPriceNowServices(builder.Configuration);
 
-// ✅ Override IPriceService to singleton so the cache is shared across ALL requests.
-// If AddCryptoPriceNowServices registered it as Scoped/Transient, this replaces it.
-// A new PriceService per request = empty cache every time = always slow.
+// Override IPriceService to singleton so the cache is shared across ALL requests.
 builder.Services.AddSingleton<IPriceService, PriceService>();
 
 // Background warmer — fetches all prices on startup and every N seconds.
-// Every HTTP request just reads from the in-memory cache and returns instantly.
 builder.Services.AddHostedService<PriceWarmingService>();
 
 var app = builder.Build();
@@ -61,14 +58,17 @@ app.MapGet("/api/prices/two-way", async (
     return Results.Ok(rows);
 });
 
-// ── Sponsor proxy (/api/sponsors) ───────────────────────────────────
-// Fetches the active sponsor list from monerica server-side (no CORS),
-// caches for 5 minutes, served to the browser as same-origin JSON.
+// ── Sponsor proxy (/api/sponsors) ────────────────────────────────────────────
+// Fetches the active sponsor list from Monerica server-side (avoids CORS),
+// caches for a configurable TTL, served to the browser as same-origin JSON.
+// Config keys (appsettings.json):
+//   Sponsors:SourceUrl        — upstream JSON endpoint
+//   Sponsors:CacheTtlMinutes  — how long to cache the response (default: 5)
 var _sponsorCache = string.Empty;
 var _sponsorCachedAt = DateTime.MinValue;
-var _sponsorCacheTtl = TimeSpan.FromMinutes(5);
+var _sponsorCacheTtl = TimeSpan.FromMinutes(
+    builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 5));
 var _sponsorLock = new SemaphoreSlim(1, 1);
-const string SponsorSourceUrl = "https://app.monerica.com/sponsoredlisting/activesponsorjson";
 
 app.MapGet("/api/sponsors", async (IHttpClientFactory httpFactory, CancellationToken ct) =>
 {
@@ -81,9 +81,11 @@ app.MapGet("/api/sponsors", async (IHttpClientFactory httpFactory, CancellationT
         if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
             return Results.Content(_sponsorCache, "application/json");
 
+        var sponsorUrl = app.Configuration["Sponsors:SourceUrl"];
+
         var client = httpFactory.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(10);
-        var json = await client.GetStringAsync(SponsorSourceUrl, ct);
+        var json = await client.GetStringAsync(sponsorUrl, ct);
         _sponsorCache = json;
         _sponsorCachedAt = DateTime.UtcNow;
         return Results.Content(json, "application/json");
