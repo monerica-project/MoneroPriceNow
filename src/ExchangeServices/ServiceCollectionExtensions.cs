@@ -37,7 +37,7 @@ public static class ServiceCollectionExtensions
         services.AddChangee(config);
         services.AddAlfaCash(config);
         services.AddBitcoinVN(config);
-
+        services.AddXgram(config);
 
         //  
 
@@ -47,13 +47,13 @@ public static class ServiceCollectionExtensions
         //services.AddSwapuz(config);
 
 
-          services.AddXgram(config);
+
         // services.AddNanswap(config);
 
 
         // 
 
-        //  services.AddOctoSwap(config);
+        services.AddOctoSwap(config);
         //
         //   
         //   
