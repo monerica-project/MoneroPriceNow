@@ -47,7 +47,7 @@ public static class ServiceCollectionExtensions
         //services.AddSwapuz(config);
 
 
-        //   services.AddXgram(config);
+          services.AddXgram(config);
         // services.AddNanswap(config);
 
 
