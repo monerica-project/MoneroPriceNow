@@ -38,8 +38,8 @@ public static class ServiceCollectionExtensions
         services.AddAlfaCash(config);
         services.AddBitcoinVN(config);
         services.AddXgram(config);
+        services.AddOctoSwap(config);
 
-        //  
 
         //services.AddQuickEx(config); // auth issues
 
@@ -51,15 +51,6 @@ public static class ServiceCollectionExtensions
         // services.AddNanswap(config);
 
 
-        // 
-
-        services.AddOctoSwap(config);
-        //
-        //   
-        //   
-        //   
-        //   
-        //
         //   services.AddWagyu(config);
         // services.AddWizardSwap(config);
         //  
