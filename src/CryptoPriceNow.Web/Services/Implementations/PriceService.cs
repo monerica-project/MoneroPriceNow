@@ -14,9 +14,15 @@ public sealed class PriceService : IPriceService
     private readonly IMemoryCache cache;
     private readonly PriceServiceOptions opt;
 
-    // One semaphore per cache key — prevents multiple concurrent callers from all
-    // executing the factory simultaneously on a cache miss (thundering herd).
+    // ── Thundering-herd guard: one semaphore per per-exchange cache key ───────
     private readonly ConcurrentDictionary<string, SemaphoreSlim> keyLocks = new();
+
+    // ── Assembled result store ────────────────────────────────────────────────
+    // Keyed by "BASE->QUOTE" (e.g. "XMR->USDT:Tron").
+    // Written atomically by RefreshAndStoreAsync; read by GetTwoWayPricesInternalAsync.
+    // Requests always return the last good snapshot instantly; the background
+    // warmer replaces it without ever evicting the old data first.
+    private readonly ConcurrentDictionary<string, IReadOnlyList<TwoWayPriceRow>> latestRows = new();
 
     public PriceService(
         IEnumerable<IExchangePriceApi> priceApis,
@@ -30,43 +36,38 @@ public sealed class PriceService : IPriceService
         this.opt = options.Value;
     }
 
-    // -------------------------------------------------------------------------
-    // Public API
-    // -------------------------------------------------------------------------
+    // ── Public helpers ────────────────────────────────────────────────────────
 
-    // -------------------------------------------------------------------------
-    // Public utility methods (used by PriceWarmingService)
-    // -------------------------------------------------------------------------
-
-    /// <summary>Public wrapper so background services can parse an asset string.</summary>
     public static AssetRef ParseAssetPublic(string s) => ParseAsset(s);
 
-    /// <summary>
-    /// Evicts all cached sell/buy prices for the given pair and re-fetches them
-    /// immediately. Called by PriceWarmingService to pre-warm the cache.
-    /// </summary>
-    public async Task ForceRefreshAllAsync(
+    // ── Called by PriceWarmingService ─────────────────────────────────────────
+    // Fetches live data from every exchange API, then atomically stores the
+    // assembled result. Does NOT evict existing cache entries first — the old
+    // snapshot remains readable until the new one is ready.
+    public async Task RefreshAndStoreAsync(
         AssetRef baseRef, AssetRef quoteRef, CancellationToken ct = default)
     {
-        foreach (var api in this.priceApis)
+        // Evict per-exchange cache entries so FetchLiveAsync calls the real APIs.
+        // This is safe because latestRows still holds the previous snapshot —
+        // any page load during this window returns stale-but-valid data instantly.
+        foreach (var api in priceApis)
         {
-            var sellKey = $"sell:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}";
-            var priceKey = $"price:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}";
-            cache.Remove(sellKey);
-            cache.Remove(priceKey);
-
+            cache.Remove($"sell:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}");
+            cache.Remove($"price:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}");
             if (api is IExchangeBuyPriceApi)
-            {
-                var buyKey = $"buy:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}";
-                cache.Remove(buyKey);
-            }
+                cache.Remove($"buy:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}");
         }
 
-        // Re-fetch everything now (results go straight into cache)
-        await GetTwoWayPricesAsync(baseRef, quoteRef, ct);
+        var rows = await FetchLiveAsync(baseRef, quoteRef, ct);
+        latestRows[PairKey(baseRef, quoteRef)] = rows;
     }
 
+    // ── Keep ForceRefreshAllAsync for backward compat (warmer will switch) ────
+    public Task ForceRefreshAllAsync(
+        AssetRef baseRef, AssetRef quoteRef, CancellationToken ct = default)
+        => RefreshAndStoreAsync(baseRef, quoteRef, ct);
 
+    // ── Main query methods ────────────────────────────────────────────────────
 
     public Task<IReadOnlyList<TwoWayPriceRow>> GetTwoWayPricesAsync(
         string @base, string quote, CancellationToken ct = default)
@@ -76,14 +77,24 @@ public sealed class PriceService : IPriceService
         AssetRef baseRef, AssetRef quoteRef, CancellationToken ct = default)
         => GetTwoWayPricesInternalAsync(baseRef, quoteRef, ct);
 
-    // Per-exchange timeout: if an exchange API hangs, we return null for that
-    // exchange rather than blocking the entire response indefinitely.
-    private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
-
-    private async Task<IReadOnlyList<TwoWayPriceRow>> GetTwoWayPricesInternalAsync(
+    private Task<IReadOnlyList<TwoWayPriceRow>> GetTwoWayPricesInternalAsync(
         AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
     {
-        var tasks = this.priceApis.Select(async api =>
+        // Fast path: warmer has already built a snapshot — return it instantly
+        if (latestRows.TryGetValue(PairKey(baseRef, quoteRef), out var cached))
+            return Task.FromResult(cached);
+
+        // Cold start only (first request before warmer has finished its first run)
+        return FetchLiveAsync(baseRef, quoteRef, ct);
+    }
+
+    // ── Live fetch (calls exchange APIs in parallel, respects per-exchange TTL) 
+    private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
+
+    private async Task<IReadOnlyList<TwoWayPriceRow>> FetchLiveAsync(
+        AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
+    {
+        var tasks = priceApis.Select(async api =>
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(ExchangeTimeout);
@@ -91,7 +102,6 @@ public sealed class PriceService : IPriceService
             try
             {
                 var sellRes = await GetOneExchangeSellAsync(api, baseRef, quoteRef, cts.Token);
-
                 var buyRes = api is IExchangeBuyPriceApi buyApi
                     ? await GetOneExchangeBuyAsync(api.ExchangeKey, buyApi, baseRef, quoteRef, cts.Token)
                     : null;
@@ -112,7 +122,6 @@ public sealed class PriceService : IPriceService
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                // This exchange timed out — return a row with nulls so the rest still render
                 return new TwoWayPriceRow(
                     Exchange: api.ExchangeKey,
                     SiteName: api.SiteName,
@@ -124,10 +133,7 @@ public sealed class PriceService : IPriceService
         });
 
         var rows = await Task.WhenAll(tasks);
-
-        return rows
-            .OrderBy(x => x.Exchange)
-            .ToList();
+        return rows.OrderBy(x => x.Exchange).ToList();
     }
 
     public async Task<IReadOnlyList<PriceResult>> GetPricesAsync(
@@ -139,8 +145,7 @@ public sealed class PriceService : IPriceService
         var baseRef = ParseAsset(@base);
         var quoteRef = ParseAsset(quote);
 
-        var tasks = this.priceApis.Select(api =>
-            GetOneExchangePriceAsync(api, baseRef, quoteRef, ct));
+        var tasks = priceApis.Select(api => GetOneExchangePriceAsync(api, baseRef, quoteRef, ct));
         var results = await Task.WhenAll(tasks);
 
         return results
@@ -153,7 +158,7 @@ public sealed class PriceService : IPriceService
     public async Task<IReadOnlyList<ExchangeCurrency>> GetCurrenciesAsync(
         string exchangeKey, CancellationToken ct = default)
     {
-        var currencyApi = this.currencyApis.FirstOrDefault(x =>
+        var currencyApi = currencyApis.FirstOrDefault(x =>
             x.ExchangeKey.Equals(exchangeKey, StringComparison.OrdinalIgnoreCase));
 
         if (currencyApi is null) return Array.Empty<ExchangeCurrency>();
@@ -166,16 +171,16 @@ public sealed class PriceService : IPriceService
                ?? Array.Empty<ExchangeCurrency>();
     }
 
-    // -------------------------------------------------------------------------
-    // Private fetch helpers
-    // -------------------------------------------------------------------------
+    // ── Per-exchange cache helpers ────────────────────────────────────────────
+    // These cache individual exchange results so FetchLiveAsync doesn't hammer
+    // the exchange APIs on every warmer cycle — it reads from IMemoryCache and
+    // only calls the actual API when a per-exchange TTL expires.
 
     private Task<PriceResult?> GetOneExchangeSellAsync(
         IExchangePriceApi api, AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
     {
         var key = $"sell:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}";
         var ttl = TimeSpan.FromSeconds(Math.Clamp(opt.PriceCacheSeconds, 1, 300));
-
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
         {
             var (rb, rq) = await ResolveExchangeIdsAsync(api.ExchangeKey, baseRef, quoteRef, ct);
@@ -189,7 +194,6 @@ public sealed class PriceService : IPriceService
     {
         var key = $"buy:{exchangeKey}:{baseRef.Key}->{quoteRef.Key}";
         var ttl = TimeSpan.FromSeconds(Math.Clamp(opt.PriceCacheSeconds, 1, 300));
-
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
         {
             var (rb, rq) = await ResolveExchangeIdsAsync(exchangeKey, baseRef, quoteRef, ct);
@@ -202,7 +206,6 @@ public sealed class PriceService : IPriceService
     {
         var key = $"price:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}";
         var ttl = TimeSpan.FromSeconds(Math.Clamp(opt.PriceCacheSeconds, 1, 300));
-
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
         {
             var (rb, rq) = await ResolveExchangeIdsAsync(api.ExchangeKey, baseRef, quoteRef, ct);
@@ -210,90 +213,33 @@ public sealed class PriceService : IPriceService
         });
     }
 
-    // -------------------------------------------------------------------------
-    // Double-checked locking cache helper
-    //
-    // IMemoryCache.GetOrCreateAsync does NOT prevent concurrent callers from all
-    // executing the factory at once on a cache miss. Under load this causes a
-    // "thundering herd" — all N concurrent requests simultaneously hit every
-    // exchange API when the cache expires.
-    //
-    // This method:
-    //   1. Fast path: return immediately if already cached (no lock needed).
-    //   2. Slow path: acquire a per-key semaphore, double-check the cache,
-    //      then only ONE caller executes the factory; all others wait and then
-    //      read the value the winner wrote.
-    //   3. OperationCanceledException is always re-thrown — it is never cached
-    //      and the semaphore is only released if it was successfully acquired.
-    //   4. Other exceptions from the factory are never cached — next caller retries.
-    //   5. Null results are never cached — a failed/empty exchange response
-    //      doesn't poison the cache slot for the full TTL.
-    // -------------------------------------------------------------------------
     private async Task<T?> GetOrCreateLockedAsync<T>(
-        string key,
-        TimeSpan ttl,
-        CancellationToken ct,
-        Func<Task<T?>> factory)
+        string key, TimeSpan ttl, CancellationToken ct, Func<Task<T?>> factory)
     {
-        // Fast path — no lock required
-        if (cache.TryGetValue(key, out T? cached))
-            return cached;
+        if (cache.TryGetValue(key, out T? cached)) return cached;
 
         var sem = keyLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-
-        // Use CancellationToken.None — if we passed ct here and it fired, WaitAsync
-        // would throw BEFORE the semaphore was acquired, but after another caller
-        // might be waiting on it. That leaves the internal count broken. Instead,
-        // we always acquire, then check ct immediately afterward and bail early.
         await sem.WaitAsync(CancellationToken.None);
-
         try
         {
-            // Double-check: another caller may have populated the cache
-            // while we were waiting for the semaphore
-            if (cache.TryGetValue(key, out cached))
-                return cached;
-
-            // Bail out cleanly if cancelled while we were waiting — no point fetching
-            if (ct.IsCancellationRequested)
-                return default;
+            if (cache.TryGetValue(key, out cached)) return cached;
+            if (ct.IsCancellationRequested) return default;
 
             T? value;
-            try
-            {
-                value = await factory();
-            }
-            catch (OperationCanceledException)
-            {
-                throw; // propagate — don't cache cancellation
-            }
-            catch
-            {
-                // Don't cache other exceptions — next caller gets a fresh attempt
-                return default;
-            }
+            try { value = await factory(); }
+            catch (OperationCanceledException) { throw; }
+            catch { return default; }
 
-            // Only cache non-null successes — transient failures shouldn't
-            // block good data from appearing on the next request
             if (value is not null)
-            {
                 cache.Set(key, value, new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = ttl
-                });
-            }
+                { AbsoluteExpirationRelativeToNow = ttl });
 
             return value;
         }
-        finally
-        {
-            sem.Release();
-        }
+        finally { sem.Release(); }
     }
 
-    // -------------------------------------------------------------------------
-    // Currency resolution
-    // -------------------------------------------------------------------------
+    // ── Currency resolution ───────────────────────────────────────────────────
 
     private async Task<(AssetRef Base, AssetRef Quote)> ResolveExchangeIdsAsync(
         string exchangeKey, AssetRef @base, AssetRef quote, CancellationToken ct)
@@ -305,16 +251,12 @@ public sealed class PriceService : IPriceService
         if (currencies.Count == 0) return (@base, quote);
 
         string? baseId = string.IsNullOrWhiteSpace(@base.ExchangeId)
-            ? FindExchangeId(currencies, @base.Ticker, @base.Network)
-            : @base.ExchangeId;
-
+            ? FindExchangeId(currencies, @base.Ticker, @base.Network) : @base.ExchangeId;
         string? quoteId = string.IsNullOrWhiteSpace(quote.ExchangeId)
-            ? FindExchangeId(currencies, quote.Ticker, quote.Network)
-            : quote.ExchangeId;
+            ? FindExchangeId(currencies, quote.Ticker, quote.Network) : quote.ExchangeId;
 
         var resolvedBase = string.IsNullOrWhiteSpace(baseId) ? @base : @base with { ExchangeId = baseId };
         var resolvedQuote = string.IsNullOrWhiteSpace(quoteId) ? quote : quote with { ExchangeId = quoteId };
-
         return (resolvedBase, resolvedQuote);
     }
 
@@ -322,20 +264,19 @@ public sealed class PriceService : IPriceService
         IReadOnlyList<ExchangeCurrency> currencies, string ticker, string? network)
     {
         if (!string.IsNullOrWhiteSpace(network))
-        {
             return currencies.FirstOrDefault(c =>
                 c.Ticker.Equals(ticker, StringComparison.OrdinalIgnoreCase) &&
                 c.Network.Equals(network, StringComparison.OrdinalIgnoreCase))?.ExchangeId;
-        }
 
         return currencies.FirstOrDefault(c =>
             c.Ticker.Equals(ticker, StringComparison.OrdinalIgnoreCase))?.ExchangeId;
     }
 
+    private static string PairKey(AssetRef b, AssetRef q) => $"{b.Key}->{q.Key}";
+
     private static AssetRef ParseAsset(string s)
     {
         if (string.IsNullOrWhiteSpace(s)) return new AssetRef("");
-
         var t = s.Trim();
         var upper = t.Replace("_", "").Replace("-", "").Replace(":", "").ToUpperInvariant();
 
@@ -346,9 +287,7 @@ public sealed class PriceService : IPriceService
 
         var parts = t.Split(':', 2,
             StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 2)
-            return new AssetRef(parts[0].ToUpperInvariant(), parts[1]);
-
+        if (parts.Length == 2) return new AssetRef(parts[0].ToUpperInvariant(), parts[1]);
         return new AssetRef(t.ToUpperInvariant());
     }
 }

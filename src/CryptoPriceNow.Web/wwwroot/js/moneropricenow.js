@@ -61,6 +61,15 @@
             });
             console.log('[MoneroPriceNow] Sponsors loaded:', [...sponsorKeys]);
             renderSponsorSection();
+
+            // Re-apply sponsor row highlighting to the already-rendered table.
+            // The table was built from seed data before this fetch completed,
+            // so is-sponsor classes were missing on first paint.
+            bodyEl.querySelectorAll('tr[data-ex]').forEach(tr => {
+                const key = tr.dataset.ex;
+                const row = lastStats?.rows.find(r => r.exchange.trim().toLowerCase() === key);
+                if (row) applySponsorClass(tr, row.siteName);
+            });
         } catch (e) {
             console.warn('[MoneroPriceNow] Could not load sponsor list:', e);
         }

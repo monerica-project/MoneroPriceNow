@@ -6,21 +6,22 @@ namespace CryptoPriceNow.Web.Services;
 
 public sealed class PriceWarmingService : BackgroundService
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IPriceService _prices;
     private readonly ILogger<PriceWarmingService> _log;
     private readonly TimeSpan _interval;
 
     private static readonly (string Base, string Quote)[] Pairs =
     [
-        ("XMR", "USDTTRC")
+        ("XMR", "USDTTRC"),
+        ("XMR", "BTC"),
     ];
 
     public PriceWarmingService(
-        IServiceScopeFactory scopeFactory,
+        IPriceService prices,
         ILogger<PriceWarmingService> log,
         IConfiguration config)
     {
-        _scopeFactory = scopeFactory;
+        _prices = prices;
         _log = log;
         _interval = TimeSpan.FromSeconds(
             Math.Clamp(config.GetValue<int>("PriceService:WarmIntervalSeconds", 15), 5, 300));
@@ -29,6 +30,8 @@ public sealed class PriceWarmingService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         _log.LogInformation("[PriceWarming] Starting — interval={Interval}s", _interval.TotalSeconds);
+
+        // First warm on startup — populates latestRows before any request arrives
         await WarmAllAsync(ct);
 
         using var timer = new PeriodicTimer(_interval);
@@ -38,16 +41,10 @@ public sealed class PriceWarmingService : BackgroundService
 
     private async Task WarmAllAsync(CancellationToken ct)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-
-        // Cast to concrete type so we can call ForceRefreshAllAsync.
-        // This evicts the cache first, then fetches live data from exchanges.
-        // Without this, GetTwoWayPricesAsync just returns cached data and never
-        // calls the exchange APIs — prices would never actually update.
-        var prices = scope.ServiceProvider.GetRequiredService<IPriceService>() as PriceService;
+        var prices = _prices as PriceService;
         if (prices is null)
         {
-            _log.LogError("[PriceWarming] IPriceService is not PriceService — cannot force refresh");
+            _log.LogError("[PriceWarming] IPriceService is not PriceService — cannot refresh");
             return;
         }
 
@@ -57,7 +54,11 @@ public sealed class PriceWarmingService : BackgroundService
             {
                 var baseRef = PriceService.ParseAssetPublic(b);
                 var quoteRef = PriceService.ParseAssetPublic(q);
-                await prices.ForceRefreshAllAsync(baseRef, quoteRef, ct);
+
+                // RefreshAndStoreAsync fetches live data then atomically swaps
+                // the latestRows snapshot — no eviction window, no stale period.
+                await prices.RefreshAndStoreAsync(baseRef, quoteRef, ct);
+
                 _log.LogInformation("[PriceWarming] Refreshed {Base}/{Quote}", b, q);
             }
             catch (OperationCanceledException) { /* shutting down */ }
