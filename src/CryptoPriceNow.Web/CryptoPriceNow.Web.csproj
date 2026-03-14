@@ -15,9 +15,4 @@
     <ProjectReference Include="..\ExchangeServices\ExchangeServices.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Pages\css\" />
-    <Folder Include="Pages\js\" />
-  </ItemGroup>
-
 </Project>

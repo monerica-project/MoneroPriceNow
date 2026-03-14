@@ -4,8 +4,6 @@
     ViewData["Title"] = "MoneroPriceNow.com — Live XMR / USDT Prices";
 }
 
-<link rel="stylesheet" href="~/css/moneropricenow.css" asp-append-version="true" />
-
  
 
 <div class="price-hero">
@@ -14,7 +12,7 @@
     <div class="hero-center">
         <div class="hc-eyebrow">XMR / USDT</div>
         <div class="hc-price" id="heroMid">
-            <span class="skel" style="width:180px;height:64px;border-radius:6px;display:inline-block"></span>
+            <span class="skel skel-hero-mid"></span>
         </div>
         <div class="hc-badge">Market Price</div>
         <div class="hc-sub" id="heroMidSub"></div>
@@ -24,7 +22,7 @@
     <div class="hero-side hero-left">
         <div class="hs-label">Avg Buy Price</div>
         <div class="hs-price buy-color" id="heroAvgBuy">
-            <span class="skel" style="width:120px;height:36px;border-radius:5px"></span>
+            <span class="skel skel-hero-side"></span>
         </div>
         <div class="hs-sub">
             <span class="hs-arrow buy-arr">▼</span>
@@ -36,7 +34,7 @@
     <div class="hero-side hero-right">
         <div class="hs-label">Avg Sell Price</div>
         <div class="hs-price sell-color" id="heroAvgSell">
-            <span class="skel" style="width:120px;height:36px;border-radius:5px"></span>
+            <span class="skel skel-hero-side"></span>
         </div>
         <div class="hs-sub">
             <span class="hs-arrow sell-arr">▲</span>
@@ -77,14 +75,14 @@
             </tr>
         </thead>
         <tbody id="pricesBody">
-            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-            <tr class="skel-row"><td><span class="skel skel-name" style="width:110px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-            <tr class="skel-row"><td><span class="skel skel-name" style="width:75px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-            <tr class="skel-row"><td><span class="skel skel-name" style="width:95px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-            <tr class="skel-row"><td><span class="skel skel-name" style="width:80px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-            <tr class="skel-row"><td><span class="skel skel-name" style="width:100px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
-            <tr class="skel-row"><td><span class="skel skel-name" style="width:88px"></span></td><td><span class="skel" style="width:20px;height:20px;border-radius:4px"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel" style="width:44px;height:14px;border-radius:4px;margin-left:auto"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-ts"></span></td></tr>
         </tbody>
     </table>
 </div>
@@ -99,8 +97,7 @@
     <span class="pl-item"><span class="privacy-badge privacy-B">B</span> Minimal logs, KYC only if suspicious</span>
     <span class="pl-sep">·</span>
     <span class="pl-item"><span class="privacy-badge privacy-C">C</span> Some logs, KYC likely for larger amounts</span>
-    <span class="pl-sep">·</span>
-    <span class="pl-item"><span class="privacy-badge privacy-D">D</span> Logs kept, KYC common</span>
+ 
 
 </div>
 
