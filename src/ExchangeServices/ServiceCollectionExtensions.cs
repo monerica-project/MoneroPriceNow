@@ -39,8 +39,10 @@ public static class ServiceCollectionExtensions
         services.AddBitcoinVN(config);
         services.AddXgram(config);
         services.AddOctoSwap(config);
+        services.AddSwapgate(config);
 
 
+        //services.AddSecureShift(config);
         //services.AddQuickEx(config); // auth issues
 
         // auth issues 
@@ -51,13 +53,55 @@ public static class ServiceCollectionExtensions
         // services.AddNanswap(config);
 
 
-       //    services.AddWagyu(config);
+        //    services.AddWagyu(config);
         // services.AddWizardSwap(config);
         //  
         //    
         // services.AddCypherGoat(config);
         // services.AddXChange(config);
         //
+        return services;
+    }
+
+    public static IServiceCollection AddSwapgate(this IServiceCollection services, IConfiguration config)
+    {
+
+        // ── Swapgate ──────────────────────────────────────────────────────────────────
+
+        services.Configure<SwapgateOptions>(
+        config.GetSection("Swapgate"));
+
+        services.AddHttpClient<ISwapgateClient, SwapgateClient>(client =>
+        {
+            var seconds = config.GetValue<int>("Swapgate:RequestTimeoutSeconds", 10);
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(seconds, 2, 30));
+        });
+
+        services.AddTransient<IExchangePriceApi>(sp => sp.GetRequiredService<ISwapgateClient>());
+        services.AddTransient<IExchangeBuyPriceApi>(sp => sp.GetRequiredService<ISwapgateClient>());
+        services.AddTransient<IExchangeCurrencyApi>(sp => sp.GetRequiredService<ISwapgateClient>());
+        return services;
+    }
+
+
+    public static IServiceCollection AddSecureShift(this IServiceCollection services, IConfiguration config)
+    {
+
+        // ── SecureShift ───────────────────────────────────────────────────────────────
+        // Add to AddCryptoPriceNowServices() or Program.cs
+
+        services.Configure<SecureShiftOptions>(
+       config.GetSection("SecureShift"));
+
+        services.AddHttpClient<ISecureShiftClient, SecureShiftClient>(client =>
+        {
+            client.BaseAddress = new Uri(
+               config["SecureShift:BaseUrl"] ?? "https://secureshift.io/api/v3/");
+        });
+
+        services.AddTransient<IExchangePriceApi>(sp => sp.GetRequiredService<ISecureShiftClient>());
+        services.AddTransient<IExchangeBuyPriceApi>(sp => sp.GetRequiredService<ISecureShiftClient>());
+        services.AddTransient<IExchangeCurrencyApi>(sp => sp.GetRequiredService<ISecureShiftClient>());
         return services;
     }
 
