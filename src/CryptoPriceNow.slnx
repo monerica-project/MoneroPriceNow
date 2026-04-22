@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/CI/">
+    <File Path="CI-Tools/CI-Main.ps1" />
+    <File Path="CI-Tools/Scripts/ApplicationHelperFunctions.ps1" />
+    <File Path="CI-Tools/Scripts/BuildHelperFunctions.ps1" />
+    <File Path="CI-Tools/Scripts/GeneralHelperFunctions.ps1" />
+    <File Path="CI.bat" />
+  </Folder>
+  <Project Path="CryptoPriceNow.Web/CryptoPriceNow.Web.csproj" />
+  <Project Path="ExchangeServices/ExchangeServices.csproj" Id="7a456775-67ac-480b-9e21-20134644e0bd" />
+</Solution>

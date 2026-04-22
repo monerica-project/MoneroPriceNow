@@ -1,0 +1,152 @@
+@page
+@model CryptoPriceNow.Pages.IndexModel
+@{
+    ViewData["Title"] = "MoneroPriceNow.com — Live XMR / USDT Prices";
+}
+
+ 
+
+<div class="price-hero">
+
+    <!-- Center: Market Price (first in DOM = top on mobile) -->
+    <div class="hero-center">
+        <div class="hc-eyebrow">XMR / USDT</div>
+        <div class="hc-price" id="heroMid">
+            <span class="skel skel-hero-mid"></span>
+        </div>
+        <div class="hc-badge">Market Price</div>
+        <div class="hc-sub" id="heroMidSub"></div>
+    </div>
+
+    <!-- Left: Avg Buy -->
+    <div class="hero-side hero-left">
+        <div class="hs-label">Avg Buy Price</div>
+        <div class="hs-price buy-color" id="heroAvgBuy">
+            <span class="skel skel-hero-side"></span>
+        </div>
+        <div class="hs-sub">
+            <span class="hs-arrow buy-arr">▼</span>
+            <span id="heroAvgBuyN">USDT → XMR · you pay per XMR</span>
+        </div>
+    </div>
+
+    <!-- Right: Avg Sell -->
+    <div class="hero-side hero-right">
+        <div class="hs-label">Avg Sell Price</div>
+        <div class="hs-price sell-color" id="heroAvgSell">
+            <span class="skel skel-hero-side"></span>
+        </div>
+        <div class="hs-sub">
+            <span class="hs-arrow sell-arr">▲</span>
+            <span id="heroAvgSellN">XMR → USDT · you receive per XMR</span>
+        </div>
+    </div>
+
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+    <div class="pulse-dot"></div>
+    <span id="lastUpdated">Fetching prices…</span>
+    <div class="tick-track" id="tickTrack"></div>
+    <span class="session-delta" id="sessionDelta"></span>
+    <div class="countdown-wrap">
+        <div class="countdown-ring">
+            <svg width="16" height="16" viewBox="0 0 16 16">
+                <circle class="ring-bg" cx="8" cy="8" r="6" />
+                <circle class="ring-fill" cx="8" cy="8" r="6" id="ringFill"
+                        stroke-dasharray="37.7" stroke-dashoffset="0" />
+            </svg>
+        </div>
+        <span id="countdownText">15s</span>
+    </div>
+</div>
+
+<!-- Quick converter -->
+<div class="converter">
+    <div class="conv-title">Quick Convert</div>
+    <div class="conv-row">
+        <div class="conv-field">
+            <label for="convUsd">USD</label>
+            <input type="number" id="convUsd" inputmode="decimal" step="any" min="0" placeholder="0.00" autocomplete="off" />
+        </div>
+        <div class="conv-swap" aria-hidden="true">⇄</div>
+        <div class="conv-field">
+            <label for="convXmr">XMR</label>
+            <input type="number" id="convXmr" inputmode="decimal" step="any" min="0" placeholder="0.000000" autocomplete="off" />
+        </div>
+    </div>
+    <div class="conv-note" id="convNote">Based on current market price</div>
+</div>
+
+<!-- Price table -->
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th class="th-sort" data-sort="name">Exchange <span class="sort-arrow"></span></th>
+                <th class="th-sort" data-sort="privacy">Privacy <span class="sort-arrow"></span></th>
+                <th class="th-sort" data-sort="buy">Buy ($ per XMR) <span class="sort-arrow"></span></th>
+                <th class="th-sort" data-sort="sell">Sell ($ per XMR) <span class="sort-arrow"></span></th>
+                <th class="th-sort" data-sort="spread">Spread <span class="sort-arrow"></span></th>
+                <th class="th-sort" data-sort="minamt">Min Amount <span class="sort-arrow"></span></th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody id="pricesBody">
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+            <tr class="skel-row"><td><span class="skel skel-name"></span></td><td><span class="skel skel-privacy"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-spread"></span></td><td><span class="skel skel-num"></span></td><td><span class="skel skel-ts"></span></td></tr>
+        </tbody>
+    </table>
+</div>
+
+ 
+
+<!-- Privacy legend -->
+<div class="privacy-legend">
+    <span class="pl-title">Privacy levels:</span>
+    <span class="pl-item"><span class="privacy-badge privacy-A">A</span> No logs, never KYC</span>
+    <span class="pl-sep">·</span>
+    <span class="pl-item"><span class="privacy-badge privacy-B">B</span> Minimal logs, KYC only if suspicious</span>
+    <span class="pl-sep">·</span>
+    <span class="pl-item"><span class="privacy-badge privacy-C">C</span> Some logs, KYC likely for larger amounts</span>
+    <span class="pl-sep">·</span>
+    <span class="pl-item"><span class="privacy-badge privacy-V">V</span> Varies by provider</span>
+
+</div>
+
+
+<!-- Explainer cards -->
+<div class="explainer-section">
+    <div class="explainer-card">
+        <span class="ec-title">&#x25BC; Buy price — lower is better</span>
+        The <strong>buy price</strong> is how many <strong>$USD (USDT)</strong> you must spend to receive <strong>1 XMR</strong>.
+        A lower buy price means a cheaper exchange. The best buy is highlighted in green.
+    </div>
+    <div class="explainer-card">
+        <span class="ec-title">&#x25B2; Sell price — higher is better</span>
+        The <strong>sell price</strong> is how many <strong>$USD (USDT)</strong> you receive when you send <strong>1 XMR</strong>.
+        A higher sell price means more value back. The best sell is highlighted in green.
+    </div>
+</div>
+
+<!-- Disclosure -->
+<div class="disclosure">
+    Prices are indicative floating rates on instant swaps.&nbsp;&nbsp;
+    Some links on this page may be affiliate links in which we may earn a commission.
+</div>
+
+<!-- Sponsor section -->
+<div class="sponsor-section" id="sponsorSection">
+    <div class="sponsor-section-title">&#x2605; Sponsors</div>
+    <div id="sponsorTiers"></div>
+</div>
+
+<script>window.__INITIAL_PRICES__ = @Html.Raw(Model.InitialPricesJson);</script>
+<script src="~/js/moneropricenow.js" asp-append-version="true"></script>

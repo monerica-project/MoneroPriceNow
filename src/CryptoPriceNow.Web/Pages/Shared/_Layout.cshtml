@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/css/moneropricenow.css" asp-append-version="true" />
+</head>
+<body>
+    <!-- ── Sponsor bar ── -->
+    <div class="sponsor-bar">
+        Sponsored by <a href="https://monerica.com" target="_blank" rel="noopener noreferrer sponsored">Monerica</a>
+    </div>
+
+    <!-- ── Page content ── -->
+    <div class="page-body">
+        <main role="main" class="pb-3">
+            @RenderBody()
+        </main>
+    </div>
+
+    <!-- ── Footer ── -->
+    <footer class="site-footer">
+        <span>© @System.DateTime.UtcNow.Year MoneroPriceNow.com | <a href="https://github.com/monerica-project/MoneroPriceNow" target="_blank">Code</a> | <a href="~/contact">Contact</a></span>
+    </footer>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
