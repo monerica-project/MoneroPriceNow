@@ -19,6 +19,8 @@ builder.Services.AddHostedService<PriceWarmingService>();
 
 var app = builder.Build();
 
+var torUrl = builder.Configuration.GetValue<string>("TorUrl") ?? string.Empty;
+
 // Remove X-Powered-By and other identifying headers
 app.Use(async (context, next) =>
 {
@@ -28,6 +30,14 @@ app.Use(async (context, next) =>
         context.Response.Headers.Remove("X-AspNet-Version");
         context.Response.Headers.Remove("X-AspNetMvc-Version");
         context.Response.Headers.Remove("Server");
+
+        // Advertise .onion version to Tor Browser on clearnet responses only.
+        // Tor Browser reads Onion-Location and shows a ".onion available" pill.
+        if (!string.IsNullOrEmpty(torUrl) && !context.Request.Host.Host.EndsWith(".onion", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.Headers["Onion-Location"] = torUrl + context.Request.Path + context.Request.QueryString;
+        }
+
         return Task.CompletedTask;
     });
     await next();

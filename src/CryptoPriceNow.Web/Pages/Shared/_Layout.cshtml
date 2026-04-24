@@ -1,3 +1,9 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@{
+    var torUrl = Config["TorUrl"];
+    var hasTor = !string.IsNullOrEmpty(torUrl);
+    var isOnTor = Context.Request.Host.Host.EndsWith(".onion", StringComparison.OrdinalIgnoreCase);
+}
 <!DOCTYPE html>
 <html lang="en">
 <head>

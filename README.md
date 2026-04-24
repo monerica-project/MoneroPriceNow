@@ -35,6 +35,8 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "SourceUrl": "https://app.monerica.com/sponsoredlisting/activesponsorjson",
     "CacheTtlMinutes": 5
   },
+  "DisableHttpsRedirect": true,
+  "TorUrl": "",
   "PriceService": {
     "WarmIntervalSeconds": 15,
     "PriceCacheSeconds": 600,
