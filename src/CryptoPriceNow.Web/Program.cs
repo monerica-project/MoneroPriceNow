@@ -33,13 +33,21 @@ app.Use(async (context, next) =>
     await next();
 });
 
+var disableHttpsRedirect = builder.Configuration.GetValue<bool>("DisableHttpsRedirect");
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    app.UseHsts();
+    if (!disableHttpsRedirect)
+    {
+        app.UseHsts();
+    }
 }
 
-app.UseHttpsRedirection();
+if (!disableHttpsRedirect)
+{
+    app.UseHttpsRedirection();
+}
 app.UseRouting();
 app.UseAuthorization();
 
