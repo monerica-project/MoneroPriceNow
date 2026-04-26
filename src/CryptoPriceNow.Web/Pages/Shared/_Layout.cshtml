@@ -16,7 +16,7 @@
 <body>
     <!-- ── Sponsor bar ── -->
     <div class="sponsor-bar">
-        Sponsored by <a href="https://monerica.com" target="_blank" rel="noopener noreferrer sponsored">Monerica</a>
+        Built by <a href="https://monerica.com" target="_blank" rel="noopener noreferrer sponsored">Monerica</a>
     </div>
 
     <!-- ── Page content ── -->
@@ -28,7 +28,15 @@
 
     <!-- ── Footer ── -->
     <footer class="site-footer">
-        <span>© @System.DateTime.UtcNow.Year MoneroPriceNow.com | <a href="https://github.com/monerica-project/MoneroPriceNow" target="_blank">Code</a> | <a href="~/contact">Contact</a></span>
+        <span>
+            © @System.DateTime.UtcNow.Year MoneroPriceNow.com |
+            <a href="https://github.com/monerica-project/MoneroPriceNow" target="_blank">Code</a> |
+            <a href="~/contact">Contact</a>
+            @if (hasTor && !isOnTor)
+            {
+                <text> | <a href="@torUrl" rel="noopener noreferrer">Tor</a></text>
+            }
+        </span>
     </footer>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
