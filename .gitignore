@@ -94,3 +94,7 @@ rcf/
 
 */publish
 /publish/web
+CI/deploy-config-windows.sh
+CI/deploy-config.sh
+publish/web-windows/appsettings.json
+publish/
