@@ -4,23 +4,31 @@ Live Monero price aggregator pulling rates from a large set of no-KYC exchanges 
 
 ## Prerequisites
 
+### For local development
+
 - .NET SDK (matching the version specified in `CryptoPriceNow.Web.csproj`)
-- PowerShell (for deployment)
-- Web Deploy (`msdeploy`) — invoked via the repo's `ci.bat`
-- API keys / referral IDs for any exchanges you want to enable
+- A copy of `appsettings.json` populated with API keys and referral IDs (see below)
+
+### For deployment to a Linux VPS
+
+- An Ubuntu 22.04+ VPS with the base stack installed (Docker, .NET ASP.NET runtime, nginx, certbot, ufw, fail2ban, a `webapp` system user, and an `/opt/<app-name>` directory layout)
+- SSH access to the VPS configured with key-based auth
+- An entry in `~/.ssh/config` for the VPS so the deploy script can connect by alias
+- Passwordless `sudo` configured for your VPS user (see "VPS prerequisites" below)
+- DNS A record(s) for your domain pointing at the VPS public IP
 
 ## Local Setup
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOURUSER/CryptoPriceNow.git
-cd CryptoPriceNow
+git clone https://github.com/YOURUSER/MoneroPriceNow.git
+cd MoneroPriceNow
 ```
 
 ### 2. Create `appsettings.json`
 
-Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the format below. Fill in API keys, referral links, and any values you need to customize per-exchange. Exchanges with blank `ApiKey` / `SiteUrl` values will need those filled in before they'll return live rates.
+Create an `appsettings.json` file in the `src/CryptoPriceNow.Web` folder using the format below. Fill in API keys, referral links, and any values you need to customize per-exchange. Exchanges with blank `ApiKey` / `SiteUrl` values will need those filled in before they'll return live rates.
 
 ```json
 {
@@ -32,7 +40,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "AllowedHosts": "*",
   "Sponsors": {
-    "SourceUrl": "https://app.monerica.com/sponsoredlisting/activesponsorjson",
+    "SourceUrl": "https://YOUR-SPONSOR-FEED-URL/activesponsorjson",
     "CacheTtlMinutes": 5
   },
   "DisableHttpsRedirect": true,
@@ -45,7 +53,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
 
   "SageSwap": {
     "SiteName": "SageSwap",
-    "SiteUrl": "https://sageswap.io/?utm_source=s4f595TMvM",
+    "SiteUrl": "https://sageswap.io/?utm_source=YOUR_REF",
     "BaseUrl": "https://sageswap.io/api",
     "TimeoutSeconds": 10,
     "UserAgent": "CryptoPriceNow/1.0",
@@ -55,7 +63,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "PegasusSwap": {
     "SiteName": "PegasusSwap",
-    "SiteUrl": "https://pegasusswap.com/?ref=JVN3MSB",
+    "SiteUrl": "https://pegasusswap.com/?ref=YOUR_REF",
     "BaseUrl": "https://api.pegasusswap.com",
     "TimeoutSeconds": 10,
     "UserAgent": "CryptoPriceNow/1.0",
@@ -66,7 +74,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "StealthEx": {
     "SiteName": "StealthEX",
-    "SiteUrl": "https://stealthex.io/?ref=IFobWnnMRU",
+    "SiteUrl": "https://stealthex.io/?ref=YOUR_REF",
     "BaseUrl": "https://api.stealthex.io",
     "TimeoutSeconds": 30,
     "UserAgent": "CryptoPriceNow/1.0",
@@ -76,7 +84,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "Baltex": {
     "SiteName": "Baltex",
-    "SiteUrl": "https://baltex.io?_bpLink=7f3fa48c-ad72405c2c024ae7",
+    "SiteUrl": "https://baltex.io?_bpLink=YOUR_REF",
     "BaseUrl": "https://api.baltex.io",
     "stealthex": null,
     "TimeoutSeconds": 10,
@@ -106,7 +114,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "DevilExchange": {
     "SiteName": "Devil.Exchange",
-    "SiteUrl": "https://devil.exchange/?ref=monerica",
+    "SiteUrl": "https://devil.exchange/?ref=YOUR_REF",
     "BaseUrl": "https://devil.exchange",
     "PairsCacheSeconds": 300,
     "QuoteCacheSeconds": 10,
@@ -127,7 +135,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "EtzSwap": {
     "SiteName": "ETZ-Swap",
-    "SiteUrl": "https://etz-swap.com?ref=RIEKD1MGVQT3KG5H0DSQ",
+    "SiteUrl": "https://etz-swap.com?ref=YOUR_REF",
     "BaseUrl": "https://api.etz-swap.com",
     "TimeoutSeconds": 20,
     "ApiKey": "",
@@ -138,7 +146,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "FuguSwap": {
     "SiteName": "FuguSwap",
-    "SiteUrl": "https://fuguswap.com/?referral_id=dcc7415a701f",
+    "SiteUrl": "https://fuguswap.com/?referral_id=YOUR_REF",
     "BaseUrl": "https://api.fuguswap.com/partners",
     "TimeoutSeconds": 20,
     "ApiKey": "",
@@ -147,7 +155,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "FixedFloat": {
     "SiteName": "FixedFloat",
-    "SiteUrl": "https://fixedfloat.com/XMR/USDT/?ref=j5jktpac",
+    "SiteUrl": "https://fixedfloat.com/XMR/USDT/?ref=YOUR_REF",
     "BaseUrl": "https://ff.io",
     "TimeoutSeconds": 20,
     "ApiKey": "",
@@ -157,7 +165,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "CCECash": {
     "SiteName": "CCE Cash",
-    "SiteUrl": "https://cce.cash?ref=R2sOPwHR&fromCoin=XMR|Monero&toCoin=USDT|TRON",
+    "SiteUrl": "https://cce.cash?ref=YOUR_REF&fromCoin=XMR|Monero&toCoin=USDT|TRON",
     "BaseUrl": "https://cce.cash",
     "ApiKey": "",
     "ApiSecret": "",
@@ -167,7 +175,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "Xgram": {
     "SiteName": "Xgram",
-    "SiteUrl": "https://xgram.io/?refId=699f6dd81d1b4",
+    "SiteUrl": "https://xgram.io/?refId=YOUR_REF",
     "BaseUrl": "https://xgram.io/api/v1",
     "ApiKey": "",
     "RequestTimeoutSeconds": 10,
@@ -176,7 +184,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "LetsExchange": {
     "SiteName": "LetsExchange",
-    "SiteUrl": "https://letsexchange.io/?ref_id=fEKMDDWtsu9tN98X",
+    "SiteUrl": "https://letsexchange.io/?ref_id=YOUR_REF",
     "BaseUrl": "https://api.letsexchange.io/api",
     "ApiKey": "",
     "AffiliateId": "",
@@ -191,7 +199,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "SiteName": "",
     "SiteUrl": "",
     "BaseUrl": "https://api.wagyu.xyz",
-    "UserAgent": "MonericaPriceBot/1.0",
+    "UserAgent": "CryptoPriceNow/1.0",
     "RatesCacheSeconds": 25,
     "RequestTimeoutSeconds": 8,
     "RetryCount": 2,
@@ -200,26 +208,26 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   },
   "Exolix": {
     "SiteName": "Exolix",
-    "SiteUrl": "https://exolix.com?ref=BD69BCE01E85280E4179278A0953E133",
+    "SiteUrl": "https://exolix.com?ref=YOUR_REF",
     "BaseUrl": "https://exolix.com/api/v2",
     "ApiKey": "",
     "RequestTimeoutSeconds": 20,
     "RetryCount": 2,
     "RateType": "float",
-    "UserAgent": "Monerica/1.0 (+https://monerica.com)",
+    "UserAgent": "CryptoPriceNow/1.0",
     "PrivacyLevel": "B",
     "MinAmountUsd": 49.00
   },
   "ChangeNow": {
     "SiteName": "ChangeNOW",
-    "SiteUrl": "https://changenow.app.link/referral?link_id=40676d9d377a6b&from=xmr&to=usdttrc20",
+    "SiteUrl": "https://changenow.app.link/referral?link_id=YOUR_REF&from=xmr&to=usdttrc20",
     "BaseUrl": "https://api.changenow.io",
     "ApiKey": "",
     "Flow": "standard",
     "CurrenciesCacheSeconds": 21600,
     "RequestTimeoutSeconds": 20,
     "RetryCount": 2,
-    "UserAgent": "Monerica/1.0",
+    "UserAgent": "CryptoPriceNow/1.0",
     "PrivacyLevel": "C",
     "MinAmountUsd": 17.81
   },
@@ -231,7 +239,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "RequestTimeoutSeconds": 20,
     "RetryCount": 2,
     "CurrenciesCacheSeconds": 21600,
-    "UserAgent": "Monerica/1.0",
+    "UserAgent": "CryptoPriceNow/1.0",
     "PrivacyLevel": "B",
     "MinAmountUsd": 50.00
   },
@@ -239,7 +247,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "BaseUrl": "https://api.swapuz.com",
     "ApiKey": "",
     "SiteName": "Swapuz",
-    "SiteUrl": "https://swapuz.com/?ref=8bb61963-e9c2-48c9-9aa3-c59c9c6da3af",
+    "SiteUrl": "https://swapuz.com/?ref=YOUR_REF",
     "RequestTimeoutSeconds": 10,
     "PrivacyLevel": "A"
   },
@@ -247,7 +255,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "BaseUrl": "https://changee.com",
     "ApiKey": "",
     "SiteName": "Changee",
-    "SiteUrl": "https://changee.com?refId=671906a166318",
+    "SiteUrl": "https://changee.com?refId=YOUR_REF",
     "RequestTimeoutSeconds": 10,
     "PrivacyLevel": "C",
     "MinAmountUsd": 500.00
@@ -255,7 +263,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   "Quickex": {
     "BaseUrl": "https://quickex.io/",
     "SiteName": "Quickex",
-    "SiteUrl": "https://quickex.io/exchange-usdttrc20-xmr?ref=aff_1089",
+    "SiteUrl": "https://quickex.io/exchange-usdttrc20-xmr?ref=YOUR_REF",
     "PrivacyLevel": "C",
     "RequestTimeoutSeconds": 10,
     "ReferrerId": "",
@@ -271,16 +279,16 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "SiteName": "SimpleSwap",
     "BaseUrl": "https://api.simpleswap.io",
     "ApiKey": "",
-    "SiteUrl": "https://simpleswap.io/?ref=f3b46b88d743&from=xmr-xmr&to=usdt-trx&amount=1",
+    "SiteUrl": "https://simpleswap.io/?ref=YOUR_REF&from=xmr-xmr&to=usdt-trx&amount=1",
     "PrivacyLevel": "C",
     "MinAmountUsd": 19.90
   },
   "GoDex": {
     "BaseUrl": "https://api.godex.io",
     "ApiKey": "",
-    "AffiliateId": "IWqW8MF0X29Ridbv",
+    "AffiliateId": "YOUR_AFFILIATE_ID",
     "SiteName": "GoDex",
-    "SiteUrl": "https://godex.io/?aff_id=IWqW8MF0X29Ridbv&utm_source=affiliate&utm_medium=monerica&utm_campaign=IWqW8MF0X29Ridbv",
+    "SiteUrl": "https://godex.io/?aff_id=YOUR_AFFILIATE_ID",
     "RequestTimeoutSeconds": 12,
     "PrivacyLevel": "C",
     "MinAmountUsd": 160
@@ -289,7 +297,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "BaseUrl": "https://bitcoinvn.io",
     "ApiKey": "",
     "SiteName": "BitcoinVN",
-    "SiteUrl": "https://bitcoinvn.io/?ref=81883534a8a05e53",
+    "SiteUrl": "https://bitcoinvn.io/?ref=YOUR_REF",
     "RequestTimeoutSeconds": 10,
     "PrivacyLevel": "B",
     "MinAmountUsd": 37.87962
@@ -297,7 +305,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   "AlfaCash": {
     "BaseUrl": "https://www.alfa.cash",
     "SiteName": "AlfaCash",
-    "SiteUrl": "https://www.alfa.cash/?rid=2f7aec12",
+    "SiteUrl": "https://www.alfa.cash/?rid=YOUR_REF",
     "RequestTimeoutSeconds": 12,
     "PrivacyLevel": "B",
     "MinAmountUsd": 23.44
@@ -319,7 +327,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   "Swapgate": {
     "BaseUrl": "https://swapgate.io/",
     "SiteName": "Swapgate",
-    "SiteUrl": "https://swapgate.io/exchange-USDTERC20-XMR?ref=aff_831",
+    "SiteUrl": "https://swapgate.io/exchange-USDTERC20-XMR?ref=YOUR_REF",
     "PrivacyLevel": "C",
     "RequestTimeoutSeconds": 10,
     "XmrCurrency": "XMR",
@@ -334,7 +342,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "ApiKey": "",
     "BaseUrl": "https://api.changehero.io/v2/",
     "SiteName": "ChangeHero",
-    "SiteUrl": "https://changehero.io/?ref=428fdd2d707649b6b85c4a86d1230c52",
+    "SiteUrl": "https://changehero.io/?ref=YOUR_REF",
     "PrivacyLevel": "C",
     "RequestTimeoutSeconds": 10,
     "XmrCode": "xmr",
@@ -346,7 +354,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "ApiKey": "",
     "BaseUrl": "https://api.swapter.io/",
     "SiteName": "Swapter",
-    "SiteUrl": "https://swapter.io/?ref=6cb8e05c-4b4f-4b49-a0da-8bd0ad58001b",
+    "SiteUrl": "https://swapter.io/?ref=YOUR_REF",
     "PrivacyLevel": "C",
     "RequestTimeoutSeconds": 10,
     "XmrCoin": "XMR",
@@ -360,7 +368,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "ApiKey": "",
     "BaseUrl": "https://api.bitxchange.io",
     "SiteName": "BitXChange",
-    "SiteUrl": "https://www.bitxchange.io/?ref=vqpQnABudv",
+    "SiteUrl": "https://www.bitxchange.io/?ref=YOUR_REF",
     "PrivacyLevel": "C",
     "RequestTimeoutSeconds": 10,
     "XmrSymbol": "XMR",
@@ -388,7 +396,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
     "ApiKey": "",
     "BaseUrl": "https://api.stereoswap.app",
     "SiteName": "StereoSwap",
-    "SiteUrl": "https://stereoswap.app?referral_code=ATQ9bpXd",
+    "SiteUrl": "https://stereoswap.app?referral_code=YOUR_REF",
     "PrivacyLevel": "B",
     "RequestTimeoutSeconds": 10,
     "TypeSwap": 2,
@@ -403,7 +411,7 @@ Create an `appsettings.json` file in the `CryptoPriceNow.Web` folder using the f
   "Trocador": {
     "BaseUrl": "https://api.trocador.app",
     "SiteName": "Trocador",
-    "SiteUrl": "https://trocador.app/en/?network_to=TRC20&ticker_from=xmr&network_from=monero&amount_from=1&ticker_to=usdt&ref=QOAQCBOx11",
+    "SiteUrl": "https://trocador.app/en/?network_to=TRC20&ticker_from=xmr&network_from=monero&amount_from=1&ticker_to=usdt&ref=YOUR_REF",
     "RequestTimeoutSeconds": 12,
     "ApiKey": "",
     "UsdtNetwork": "TRC20",
@@ -423,55 +431,185 @@ Common per-exchange fields:
 - **MinAmountUsd** — minimum swap amount enforced by the exchange, used to filter quotes
 - **TimeoutSeconds / RequestTimeoutSeconds / RetryCount** — HTTP client tuning
 
-> **Do not commit this file.** Add it to `.gitignore`.
+> **Do not commit this file.** It contains your real API keys and is git-ignored.
 
-### 3. Run the application
+### 3. Run the application locally
 
 ```bash
-dotnet run --project CryptoPriceNow.Web/CryptoPriceNow.Web.csproj
+dotnet run --project src/CryptoPriceNow.Web/CryptoPriceNow.Web.csproj
 ```
 
 ## Deployment
 
-Deployment uses Web Deploy (`msdeploy`) and is driven by the repo's `ci.bat`. A thin PowerShell wrapper holds your per-environment values and calls `ci.bat DeployWebApp`.
+Deployment uses a Bash script that runs from your laptop, builds the project locally, syncs the binaries to the VPS via rsync, installs/updates the systemd unit and nginx config, ensures TLS via Let's Encrypt, and (optionally) configures a Tor hidden service.
 
-### Create `cryptopricenow_deployment.ps1`
+The pipeline targets a Linux VPS running Kestrel behind nginx, managed by systemd. It replaces the older Windows + IIS + MSDeploy setup.
 
-Create the script (wherever you keep local deploy scripts) with the following contents, filling in every value:
+### Repository layout
 
-```powershell
-$MsDeployLocation  = "https://HOST:PORT"
-$webAppHost        = "WEBAPP"
-$contentPathDes    = "FILEPATH"
-$msDeployUserName  = 'USERNAME'
-$msDeployPassword  = 'PASSWORD'
-$dbConnectionString = 'Data Source=HOST,PORT;Initial Catalog=DBNAME;User ID=USERNAME;Password=PASSWORD;TrustServerCertificate=true'
+```
+MoneroPriceNow/
+├── src/
+│   └── CryptoPriceNow.Web/
+│       └── CryptoPriceNow.Web.csproj
+└── CI/
+    ├── deploy.sh              # main deploy orchestrator (runs from your laptop)
+    └── deploy-config.sh       # per-environment values, edit before deploying
+```
 
-cd "FILEPATHOFREPO"
+### VPS prerequisites (one-time, before first deploy)
 
-.\ci.bat DeployWebApp -properties "@{'MsDeployLocation'='$MsDeployLocation';'webAppHost'='$webAppHost';'contentPathDes'='$contentPathDes';'msDeployUserName'='$msDeployUserName';'msDeployPassword'='$msDeployPassword';'dbConnectionString'='$dbConnectionString';}"
+These steps assume your VPS is already running Ubuntu 22.04+ with the base stack installed (Docker, .NET ASP.NET runtime, nginx, certbot, ufw, fail2ban, a `webapp` system user, and the `/opt/<APP_NAME>` directory layout).
+
+**1. Configure an SSH alias on your laptop.** Add to `~/.ssh/config`:
+
+```
+Host my-vps
+    HostName YOUR.VPS.IP.ADDRESS
+    Port 22
+    User YOUR_USER
+```
+
+Replace with your VPS's IP, SSH port, and admin user. Test with `ssh my-vps`.
+
+**2. Configure passwordless `sudo` for the deploy user on the VPS.** The deploy script invokes `sudo` over SSH for things like writing systemd units, reloading nginx, and running certbot. Without NOPASSWD, every step would prompt for a password and the non-interactive SSH would hang.
+
+```bash
+ssh my-vps
+echo "YOUR_USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/YOUR_USER-deploy
+sudo chmod 440 /etc/sudoers.d/YOUR_USER-deploy
+exit
+```
+
+**3. Point DNS at the VPS.** Create A records for your domain pointing at the VPS IP:
+
+| Type | Name | Value |
+|------|------|-------|
+| A | yourdomain.com | YOUR.VPS.IP.ADDRESS |
+| CNAME | www | yourdomain.com |
+
+**4. (Optional) Tor hidden service keys.** If you want to preserve an existing `.onion` address from a prior server, copy the three files from the old `<tor-data-dir>/<service-name>/` folder:
+
+- `hostname`
+- `hs_ed25519_public_key`
+- `hs_ed25519_secret_key`
+
+Save them in a folder on your laptop (e.g. `~/tor-keys/myapp/`) and point `TOR_KEYS_DIR` at it in the deploy config below.
+
+The deploy script will install Tor on the VPS, copy the keys into `/var/lib/tor/<APP_NAME>/` with correct ownership and permissions, configure `torrc`, and start the service. Subsequent deploys detect that Tor is already configured and skip the setup so the onion stays continuously available.
+
+If you don't want a Tor hidden service, leave `TOR_KEYS_DIR=""` and the entire Tor block is skipped.
+
+### Configure the deploy
+
+Edit `CI/deploy-config.sh` with values for your environment:
+
+```bash
+#!/usr/bin/env bash
+# deploy-config.sh — sourced by deploy.sh
+
+# Connection (uses ~/.ssh/config alias for port + user)
+VPS="my-vps"
+
+# App identity — drives systemd unit name, nginx conf name, and deploy path
+APP_NAME="myapp"
+DOMAIN="yourdomain.com"
+APP_PORT=5085
+
+# Project paths
+WEB_PROJECT="../src/CryptoPriceNow.Web/CryptoPriceNow.Web.csproj"
+DEPLOY_PATH="/opt/$APP_NAME"
+
+# Service user that owns and runs the app on the VPS
+SERVICE_USER="webapp"
+
+# Tor hidden service. Leave empty to skip Tor entirely.
+TOR_KEYS_DIR=""
+
+# Smoke test (overridden automatically based on whether TLS is configured)
+REQUEST_PROTOCOL="https://"
 ```
 
 Field reference:
 
-- **MsDeployLocation** — Web Deploy endpoint URL (e.g. `https://yourserver:8172`)
-- **webAppHost** — IIS site name / host header the deploy targets
-- **contentPathDes** — destination content path on the server (the IIS physical path)
-- **msDeployUserName / msDeployPassword** — Web Deploy credentials
-- **dbConnectionString** — production SQL connection string
-- **FILEPATHOFREPO** — local path to the cloned repo (so `ci.bat` resolves correctly)
+- **VPS** — SSH alias from `~/.ssh/config`
+- **APP_NAME** — used for systemd unit name, nginx conf filename, and `/opt/<APP_NAME>` deploy directory. Must be unique per app on the VPS so multiple apps can coexist
+- **DOMAIN** — public-facing domain. For an apex domain (e.g. `yourdomain.com`), the script automatically includes `www.<domain>` in the nginx server_name and TLS cert. For subdomains (e.g. `dev.yourdomain.com`) it does not
+- **APP_PORT** — port Kestrel binds to on `127.0.0.1`. Apps on the same VPS need different ports
+- **WEB_PROJECT** — path to the `.csproj` to publish. Relative to the CI folder, or absolute
+- **DEPLOY_PATH** — destination directory on the VPS
+- **SERVICE_USER** — system user that owns the deployed binaries and runs the systemd service. Must already exist on the VPS
+- **TOR_KEYS_DIR** — path on your laptop to the folder containing the three Tor key files. Set to `""` to skip Tor
 
-> **Do not commit `cryptopricenow_deployment.ps1`.** It contains plaintext credentials.
+### Run the deploy
 
-### Run the deployment
-
-From PowerShell:
-
-```powershell
-.\cryptopricenow_deployment.ps1
+```bash
+cd CI
+./deploy.sh
 ```
 
-This will `cd` into the repo and invoke `ci.bat DeployWebApp` with the property bag above, which handles build, package, and Web Deploy publish to the target server.
+The script:
+
+1. Cleans `bin/`, `obj/`, and `publish/` folders
+2. Runs `dotnet publish` for `linux-x64` (framework-dependent)
+3. Rsyncs binaries to `/opt/<APP_NAME>/` on the VPS, preserving an existing `appsettings.Production.json` if one exists there
+4. Installs/refreshes the systemd unit and restarts the service
+5. (If `TOR_KEYS_DIR` is set) ensures Tor is installed, keys are in place, `torrc` is configured, and Tor is running. Skipped on subsequent deploys when nothing has changed
+6. Writes the nginx site config — including the `Onion-Location` header if a Tor onion is configured — and reloads nginx
+7. Ensures TLS via certbot. Issues a new cert on first run; on subsequent runs, reattaches the existing cert to the rewritten nginx config without requesting a new one
+8. Runs a smoke test (HTTP or HTTPS depending on whether the cert is in place)
+
+### Flags
+
+```bash
+./deploy.sh --skip-build   # skip dotnet publish (reuse last publish output)
+./deploy.sh --no-ssl       # skip TLS (useful before DNS is pointed)
+./deploy.sh                # default — full pipeline including TLS
+```
+
+### Daily workflow
+
+For routine code changes:
+
+```bash
+# Edit code, then:
+cd CI
+./deploy.sh
+```
+
+Total time is usually 30–60 seconds. Verify in your browser, hard-refresh if needed.
+
+### Useful one-liners
+
+```bash
+# Tail live application logs
+ssh my-vps "sudo journalctl -u myapp -f"
+
+# Service status
+ssh my-vps "sudo systemctl status myapp --no-pager"
+
+# Manual restart (deploy.sh does this for you, rarely needed)
+ssh my-vps "sudo systemctl restart myapp"
+
+# Tail nginx access log
+ssh my-vps "sudo tail -f /var/log/nginx/access.log"
+
+# Verify the .onion address being served (if Tor is configured)
+ssh my-vps "sudo cat /var/lib/tor/myapp/hostname"
+
+# Disk usage on the VPS
+ssh my-vps "df -h /"
+```
+
+### TLS auto-renewal
+
+certbot installs a systemd timer that auto-renews certs within 30 days of expiry. Verify it's enabled:
+
+```bash
+ssh my-vps "sudo systemctl list-timers | grep -i certbot"
+```
+
+No manual renewal action needed.
 
 ## .gitignore
 
@@ -480,8 +618,13 @@ Make sure at minimum the following are ignored:
 ```
 **/appsettings.json
 **/appsettings.Production.json
-cryptopricenow_deployment.ps1
+**/bin/
+**/obj/
+publish/
+CI/deploy-config.sh
 ```
+
+`deploy-config.sh` is excluded because it contains environment-specific values (your VPS hostname/IP, paths, etc).
 
 ## License
 

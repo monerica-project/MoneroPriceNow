@@ -8,7 +8,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Buffers.Text;
+using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Security;
+using System.Security.Authentication;
 
 namespace ExchangeServices;
 
@@ -514,11 +517,33 @@ public static class ServiceCollectionExtensions
             var opt = sp.GetRequiredService<IOptions<CCECashOptions>>().Value;
 
             client.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/");
-            client.Timeout = Timeout.InfiniteTimeSpan; // ✅ if you're doing your own SafeHttp timeouts
+            client.Timeout = Timeout.InfiniteTimeSpan; // SafeHttp does its own timeouts
 
             if (client.DefaultRequestHeaders.Accept.Count == 0)
                 client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
- 
+
+            // Browser-like UA — bypasses naive WAF/bot filters that reject default .NET UA on Linux
+            if (client.DefaultRequestHeaders.UserAgent.Count == 0)
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+
+            // Force HTTP/1.1 — sidesteps Linux ALPN/HTTP2 handshake quirks against picky CDN edges
+            client.DefaultRequestVersion = HttpVersion.Version11;
+            client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            SslOptions = new SslClientAuthenticationOptions
+            {
+                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                // Advertise only HTTP/1.1 in ALPN — avoids h2 negotiation issues on Linux/OpenSSL
+                ApplicationProtocols = new List<SslApplicationProtocol>
+                {
+                    SslApplicationProtocol.Http11
+                }
+            }
         });
 
         // ✅ THIS is what makes it appear in PriceService enumerations
