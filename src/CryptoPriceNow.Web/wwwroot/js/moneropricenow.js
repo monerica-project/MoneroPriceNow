@@ -12,6 +12,7 @@
     const countEl = document.getElementById('countdownText');
     const tickTrack = document.getElementById('tickTrack');
     const sessionDeltaEl = document.getElementById('sessionDelta');
+    const sponsorBarTrack = document.getElementById('sponsorBarTrack');
 
     const INTERVAL = 15_000;
     const CIRCUMF = 37.7;
@@ -64,6 +65,7 @@
             });
             console.log('[MoneroPriceNow] Sponsors loaded:', [...sponsorKeys]);
             renderSponsorSection();
+            startSponsorBanner();
 
             // Re-apply sponsor row highlighting to the already-rendered table.
             // The table was built from seed data before this fetch completed,
@@ -160,6 +162,75 @@
         }).join('');
 
         section.style.display = 'block';
+    }
+
+    // -- Rotating sponsor banner (top bar) -----------------------------------
+    // Reuses sponsorData, which loadSponsors() has already sorted by tier then
+    // expiration. Shows a fixed, spaced-out set of names (no scrolling).
+    // Each name fades + staggers in via the .sb-sponsor CSS animation, so both
+    // the first paint and each rotation glide in instead of snapping. On
+    // rotation the current set fades out as a block, then the next set staggers
+    // in. Cadence ~60s.
+    const BANNER_ROTATE_MS = 60_000;   // how long each set stays up
+    const BANNER_FADE_MS = 600;        // exit fade — keep in sync with CSS transition
+    let bannerPages = [];
+    let bannerIdx = 0;
+    let bannerTid = null;
+
+    function bannerSlots() {
+        // names shown at once — fewer on narrow screens so they stay readable
+        return window.matchMedia('(max-width: 640px)').matches ? 2 : 5;
+    }
+
+    function chunkArr(arr, size) {
+        const out = [];
+        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+        return out;
+    }
+
+    function bannerNameHtml(s) {
+        const nm = esc(s.name ?? '');
+        const tierCls = 'sb-' + normName(s.sponsorshipType || 'other');
+        const href = s.link ? esc(s.link) : null;
+        return href
+            ? `<a class="sb-sponsor ${tierCls}" href="${href}" target="_blank" rel="noopener sponsored">${nm}</a>`
+            : `<span class="sb-sponsor ${tierCls}">${nm}</span>`;
+    }
+
+    function renderBannerPage(i) {
+        if (!sponsorBarTrack || !bannerPages[i]) return;
+        // Replacing innerHTML creates fresh nodes, so the CSS entrance
+        // animation on .sb-sponsor re-runs every time — staggered fade-in.
+        sponsorBarTrack.innerHTML = bannerPages[i].map(bannerNameHtml).join('');
+    }
+
+    function startSponsorBanner() {
+        if (!sponsorBarTrack) return;
+        clearInterval(bannerTid);
+        bannerTid = null;
+        bannerIdx = 0;
+
+        if (!sponsorData.length) { sponsorBarTrack.innerHTML = ''; return; }
+
+        bannerPages = chunkArr(sponsorData, bannerSlots());
+        renderBannerPage(0);   // first set fades + staggers in via CSS
+
+        if (bannerPages.length <= 1) return;   // only one set, nothing to rotate
+
+        bannerTid = setInterval(() => {
+            // 1) fade the current set out as a block (CSS opacity transition)
+            sponsorBarTrack.classList.add('is-fading');
+            setTimeout(() => {
+                bannerIdx = (bannerIdx + 1) % bannerPages.length;
+                // 2) snap the track back to visible WITHOUT animating, so the
+                //    per-name stagger is what the eye follows on the way in
+                sponsorBarTrack.style.transition = 'none';
+                sponsorBarTrack.classList.remove('is-fading');
+                renderBannerPage(bannerIdx);            // new names stagger in
+                void sponsorBarTrack.offsetWidth;       // commit the reflow
+                sponsorBarTrack.style.transition = '';  // restore for next exit
+            }, BANNER_FADE_MS);
+        }, BANNER_ROTATE_MS);
     }
 
     function isSponsor(siteName) {

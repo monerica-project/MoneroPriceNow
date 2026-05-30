@@ -357,7 +357,8 @@ html, body {
     font-size: clamp(2.8rem, 8vw, 5rem);
     font-weight: 900;
     line-height: 1;
-    letter-spacing: -.03em;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
     color: var(--text);
 }
 
@@ -1028,6 +1029,9 @@ tbody tr.is-sponsor {
             text-decoration: underline;
         }
 
+
+    .disclosure strong { color: var(--text); }
+    
 /* â”€â”€â”€ Sponsor section â”€â”€â”€ */
 .sponsor-section {
     max-width: 900px;
@@ -1404,4 +1408,85 @@ tbody tr.is-sponsor {
     opacity: 0.55;
     text-align: center;
     margin-top: 5px;
+}
+
+/* ── Sponsor bar (top) ── */
+.sponsor-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: .4rem 2.5rem;
+    background: rgba(242,104,34,.07);
+    border-bottom: 1px solid var(--border);
+    padding: .4rem 1rem;
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: var(--text-muted);
+    letter-spacing: .04em;
+}
+
+.sb-label {
+    flex: 0 0 auto;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.sponsor-bar-track {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: .4rem 2.5rem;          /* the spacing knob */
+    transition: opacity .6s ease;  /* matches BANNER_FADE_MS */
+}
+.sponsor-bar-track.is-fading { opacity: 0; }
+
+.sb-sponsor {
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color .15s ease;
+}
+.sb-sponsor:hover { color: var(--xmr-orange2); }
+
+/* tier emphasis — higher tiers brighter and heavier */
+.sb-mainsponsor        { color: var(--text); font-weight: 700; }
+.sb-categorysponsor    { color: var(--text); font-weight: 600; }
+.sb-subcategorysponsor { font-weight: 500; }
+.sb-subsponsor         { opacity: .85; }
+
+@media (max-width: 640px) {
+    .sponsor-bar,
+    .sponsor-bar-track { gap: .35rem 1.25rem; }
+}
+
+@keyframes sbFadeIn {
+    from { opacity: 0; transform: translateY(5px); filter: blur(2px); }
+    to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
+}
+
+.sb-sponsor {
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color .15s ease;
+    animation: sbFadeIn 480ms cubic-bezier(.22,.68,0,1.1) backwards;
+}
+.sb-sponsor:hover { color: var(--xmr-orange2); }
+
+/* stagger each name in */
+.sponsor-bar-track .sb-sponsor:nth-child(1) { animation-delay: 0ms; }
+.sponsor-bar-track .sb-sponsor:nth-child(2) { animation-delay: 70ms; }
+.sponsor-bar-track .sb-sponsor:nth-child(3) { animation-delay: 140ms; }
+.sponsor-bar-track .sb-sponsor:nth-child(4) { animation-delay: 210ms; }
+.sponsor-bar-track .sb-sponsor:nth-child(5) { animation-delay: 280ms; }
+.sponsor-bar-track .sb-sponsor:nth-child(6) { animation-delay: 350ms; }
+
+@media (prefers-reduced-motion: reduce) {
+    .sb-sponsor { animation: none; }
+    .sponsor-bar-track { transition: none; }
 }
