@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ExchangeServices.Abstractions;
@@ -18,15 +17,27 @@ namespace ExchangeServices.Implementations;
 /// Docs:     https://partners.ghostswap.io/docs
 /// Base URL: https://partners-api.ghostswap.io
 ///
-/// Auth: Authorization: Bearer {publicKey}:{secret}
+/// Pricing (PUBLIC, no key):
+///   GET /v1/public/quote?from={from}&to={to}&amount={amount}
+///     → { quote: { amountTo, rate, amountUserReceives, networkFee, min, max, ... } }
+///   This is the endpoint we use for the rates table. It needs NO authentication,
+///   is rate limited on GhostSwap's side, sends Cache-Control: max-age=10, and
+///   returns GhostSwap's *best standard rate* — the same rate a direct GhostSwap
+///   user gets. That standard rate is the competitive number worth showing, and
+///   is what the partner asked us to display. We must stay under ~60 req/min per
+///   server and cache results ~10–30s (handled upstream by PriceService's snapshot
+///   + refresh cadence; we also keep a tight currencies cache below).
+///
+/// Auth (only still used for the catalog call): Authorization: Bearer {publicKey}:{secret}
 ///   - The colon-joined credential goes AFTER "Bearer ". No base64.
 ///   - publicKey looks like gspk_live_..., secret looks like gssk_live_...
+///   - If keys are absent the public quote path still works; only /v1/currencies
+///     enrichment is skipped (ResolveCode builds composite codes without it).
 ///
 /// Endpoints used:
-///   GET  /v1/currencies?lite=true  — bare ticker list (e.g. ["xmr","btc","usdtrx",...])
-///   GET  /v1/currencies            — full ticker+network objects
-///   POST /v1/quotes                — body: { from, to, amountFrom }
-///                                  → { quote: { amountUserReceives, ... } }
+///   GET /v1/public/quote           — public, keyless quote (see above)
+///   GET /v1/currencies?lite=true   — bare ticker list (e.g. ["xmr","btc","usdtrx",...])
+///   GET /v1/currencies             — full ticker+network objects (auth, optional enrichment)
 ///
 /// Ticker conventions observed from /v1/currencies?lite=true:
 ///   xmr           — bare ticker (no network suffix)
@@ -89,7 +100,7 @@ public sealed class GhostSwapClient : IGhostSwapClient
     // =========================
     public async Task<PriceResult?> GetSellPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
-        if (!IsConfigured()) return null;
+        // No IsConfigured() gate: the public quote endpoint needs no API key.
 
         var from = ResolveCode(query.Base);
         var to = ResolveCode(query.Quote);
@@ -99,25 +110,28 @@ public sealed class GhostSwapClient : IGhostSwapClient
         {
             ct.ThrowIfCancellationRequested();
 
-            var dto = await PostQuoteAsync(f, t, 1m, ct);
+            var dto = await GetPublicQuoteAsync(f, t, 1m, ct);
             if (dto?.Quote is null) continue;
 
-            // Prefer amountTo (gross destination) over amountUserReceives (net after
-            // partner margin + network/withdrawal fee). The public-facing GhostSwap
-            // site shows the gross rate, so using amountTo keeps our aggregator
-            // comparable. amountUserReceives is what a customer would actually
-            // receive on-chain, which depends on the destination network's fee and
-            // isn't really a "market price" for cross-exchange comparison.
-            var grossOut = dto.Quote.AmountTo > 0
-                ? dto.Quote.AmountTo
-                : dto.Quote.AmountUserReceives;
-            if (grossOut <= 0) continue;
+            // The public endpoint hands us GhostSwap's standard unit price in `rate`
+            // (USDT per 1 XMR for this XMR→USDT direction). Per GhostSwap, this is the
+            // best standard rate — the competitive number to show — so we display it
+            // directly. Fall back to amountTo/amountFrom (gross destination over input)
+            // when rate is missing, then to amountUserReceives as a last resort.
+            var price = dto.Quote.Rate > 0
+                ? dto.Quote.Rate
+                : dto.Quote.AmountFrom > 0 && dto.Quote.AmountTo > 0
+                    ? dto.Quote.AmountTo / dto.Quote.AmountFrom
+                    : dto.Quote.AmountTo > 0
+                        ? dto.Quote.AmountTo
+                        : dto.Quote.AmountUserReceives;
+            if (price <= 0) continue;
 
             return new PriceResult(
                 Exchange: ExchangeKey,
                 Base: query.Base,
                 Quote: query.Quote,
-                Price: grossOut, // USDT per 1 XMR (gross, pre-fee)
+                Price: price, // USDT per 1 XMR (GhostSwap standard rate)
                 TimestampUtc: DateTimeOffset.UtcNow,
                 CorrelationId: dto.Quote.QuoteId,
                 Raw: null
@@ -132,7 +146,7 @@ public sealed class GhostSwapClient : IGhostSwapClient
     // =========================
     public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
-        if (!IsConfigured()) return null;
+        // No IsConfigured() gate: the public quote endpoint needs no API key.
 
         var from = ResolveCode(query.Quote); // pay USDT
         var to = ResolveCode(query.Base);    // receive XMR
@@ -144,26 +158,29 @@ public sealed class GhostSwapClient : IGhostSwapClient
         {
             ct.ThrowIfCancellationRequested();
 
-            var dto = await PostQuoteAsync(f, t, probe, ct);
+            var dto = await GetPublicQuoteAsync(f, t, probe, ct);
             if (dto?.Quote is null) continue;
 
-            // Same rationale as the sell side: amountTo is the gross XMR destination
-            // before partner/network deductions; amountUserReceives is post-fee.
-            // Using amountTo gives us a buy price comparable to what GhostSwap shows
-            // on its public site.
+            // On the buy side `rate` is expressed in the reverse direction (its unit is
+            // ambiguous for USDT→XMR), so we derive USDT-per-XMR from the amounts instead:
+            // gross XMR out (amountTo) divided into the USDT we sent. Falls back to
+            // amountUserReceives if amountTo is absent.
             var xmrOut = dto.Quote.AmountTo > 0
                 ? dto.Quote.AmountTo
                 : dto.Quote.AmountUserReceives;
             if (xmrOut <= 0) continue;
 
-            var usdtPerXmr = probe / xmrOut;
+            // Prefer the amount we actually sent (echoed back) over the probe constant.
+            var sent = dto.Quote.AmountFrom > 0 ? dto.Quote.AmountFrom : probe;
+
+            var usdtPerXmr = sent / xmrOut;
             if (usdtPerXmr <= 0) continue;
 
-            // amountFrom side is USDT here, so any min surfaced by the API is approx USD.
-            if (dto.Quote.MinAmountFrom > 0)
+            // from-side is USDT here, so the public quote's `min` is already ~USD.
+            if (dto.Quote.Min > 0)
             {
                 lock (_apiMinAmountLock)
-                    _apiMinAmountUsd = dto.Quote.MinAmountFrom;
+                    _apiMinAmountUsd = dto.Quote.Min;
             }
 
             return new PriceResult(
@@ -441,37 +458,36 @@ public sealed class GhostSwapClient : IGhostSwapClient
     };
 
     // =========================
-    // QUOTE CALL
-    // POST /v1/quotes   body: { from, to, amountFrom }
+    // PUBLIC QUOTE CALL (no key)
+    // GET /v1/public/quote?from={from}&to={to}&amount={amount}
     // =========================
-    private async Task<QuoteResponse?> PostQuoteAsync(
-        string from, string to, decimal amountFrom, CancellationToken ct)
+    private async Task<QuoteResponse?> GetPublicQuoteAsync(
+        string from, string to, decimal amount, CancellationToken ct)
     {
-        var body = new QuoteRequest
-        {
-            From = from,
-            To = to,
-            AmountFrom = amountFrom.ToString("0.########", CultureInfo.InvariantCulture)
-        };
-
-        var json = JsonSerializer.Serialize(body, JsonOpts);
+        var amt = amount.ToString("0.########", CultureInfo.InvariantCulture);
+        var url =
+            $"/v1/public/quote?from={Uri.EscapeDataString(from)}" +
+            $"&to={Uri.EscapeDataString(to)}" +
+            $"&amount={Uri.EscapeDataString(amt)}";
 
         var res = await SendAsync(() =>
         {
-            var req = new HttpRequestMessage(HttpMethod.Post, "/v1/quotes");
-            AddAuth(req);
-            req.Content = new StringContent(json, Encoding.UTF8, "application/json");
+            // Public endpoint: NO Authorization header. GhostSwap normalizes ticker
+            // aliases (e.g. usdttrx → usdtrx) server-side, so the composite codes we
+            // build in ResolveCode are accepted as-is.
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
+            AddPublicHeaders(req);
             return req;
         }, ct);
 
         if (res is null) return null;
-        
-        // 502 with upstream_empty_quote is a permanent "no quote available" — don't waste
-        // retries or trigger cancellation cascades. Treat it the same as any other terminal
-        // 4xx/5xx by returning null immediately.
+
+        // A non-2xx here (rate-limit 429, upstream 502 "no quote available", etc.) is
+        // terminal for this pair — return null and let the caller try the next candidate
+        // rather than burning retries.
         if (res.Status < HttpStatusCode.OK || res.Status >= HttpStatusCode.MultipleChoices)
             return null;
-        
+
         try { return JsonSerializer.Deserialize<QuoteResponse>(res.Body, JsonOpts); }
         catch { return null; }
     }
@@ -485,25 +501,34 @@ public sealed class GhostSwapClient : IGhostSwapClient
         return http.SendForStringWithRetryAsync(requestFactory, timeout, Math.Clamp(opt.RetryCount, 0, 6), ct);
     }
 
-    private void AddAuth(HttpRequestMessage req)
+    // Shared headers for every GhostSwap request (auth or public).
+    private void AddCommonHeaders(HttpRequestMessage req)
     {
         if (req.Headers.Accept.Count == 0)
             req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         // Railway's edge does not respond to Expect: 100-continue. Without this, .NET sends
-        // the POST headers, blocks waiting for a "100 Continue" that never comes, and the
-        // request times out before the body ever leaves our socket. Curl works over H2 where
-        // this mechanism doesn't exist at all.
+        // the headers, blocks waiting for a "100 Continue" that never comes, and the request
+        // times out before the body ever leaves our socket. Harmless on GETs; kept everywhere.
         req.Headers.ExpectContinue = false;
-
-        // GhostSwap auth: Authorization: Bearer {publicKey}:{secret}
-        // TryAddWithoutValidation so the colon isn't reinterpreted by the header parser.
-        req.Headers.TryAddWithoutValidation(
-            "Authorization",
-            $"Bearer {opt.PublicKey}:{opt.Secret}");
 
         if (req.Headers.UserAgent.Count == 0 && !string.IsNullOrWhiteSpace(opt.UserAgent))
             req.Headers.UserAgent.ParseAdd(opt.UserAgent);
+    }
+
+    // Public endpoints (quote): common headers only, no credentials.
+    private void AddPublicHeaders(HttpRequestMessage req) => AddCommonHeaders(req);
+
+    private void AddAuth(HttpRequestMessage req)
+    {
+        AddCommonHeaders(req);
+
+        // GhostSwap auth: Authorization: Bearer {publicKey}:{secret}
+        // TryAddWithoutValidation so the colon isn't reinterpreted by the header parser.
+        // Only the catalog (/v1/currencies) still uses this; the quote path is keyless.
+        req.Headers.TryAddWithoutValidation(
+            "Authorization",
+            $"Bearer {opt.PublicKey}:{opt.Secret}");
     }
 
     private bool IsConfigured()
@@ -643,14 +668,10 @@ public sealed class GhostSwapClient : IGhostSwapClient
 
     // =========================
     // DTOs
+    // Public quote shape:
+    //   { "quote": { from, to, amountFrom, amountTo, networkFee, amountUserReceives,
+    //                rate, min, max, rateType, feeNote } }
     // =========================
-    private sealed class QuoteRequest
-    {
-        [JsonPropertyName("from")]       public string From { get; set; } = "";
-        [JsonPropertyName("to")]         public string To { get; set; } = "";
-        [JsonPropertyName("amountFrom")] public string AmountFrom { get; set; } = "0";
-    }
-
     private sealed class QuoteResponse
     {
         [JsonPropertyName("quote")] public QuoteData? Quote { get; set; }
@@ -658,12 +679,15 @@ public sealed class GhostSwapClient : IGhostSwapClient
 
     private sealed class QuoteData
     {
-        [JsonPropertyName("amountUserReceives")] public decimal AmountUserReceives { get; set; }
         [JsonPropertyName("amountFrom")]         public decimal AmountFrom { get; set; }
         [JsonPropertyName("amountTo")]           public decimal AmountTo { get; set; }
+        [JsonPropertyName("amountUserReceives")] public decimal AmountUserReceives { get; set; }
+        [JsonPropertyName("networkFee")]         public decimal NetworkFee { get; set; }
         [JsonPropertyName("rate")]               public decimal Rate { get; set; }
-        [JsonPropertyName("minAmountFrom")]      public decimal MinAmountFrom { get; set; }
-        [JsonPropertyName("maxAmountFrom")]      public decimal MaxAmountFrom { get; set; }
+        [JsonPropertyName("min")]                public decimal Min { get; set; }
+        [JsonPropertyName("max")]                public decimal Max { get; set; }
+        [JsonPropertyName("rateType")]           public string? RateType { get; set; }
+        [JsonPropertyName("feeNote")]            public string? FeeNote { get; set; }
         [JsonPropertyName("quoteId")]            public string? QuoteId { get; set; }
         [JsonPropertyName("from")]               public string? From { get; set; }
         [JsonPropertyName("to")]                 public string? To { get; set; }
