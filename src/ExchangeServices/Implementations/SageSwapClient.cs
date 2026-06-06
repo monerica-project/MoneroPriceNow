@@ -1,17 +1,16 @@
 using ExchangeServices.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Xml.Linq;
 using ExchangeServices.Http;
 
 namespace ExchangeServices.SageSwap;
 
 public sealed class SageSwapClient : ISageSwapClient, IExchangeCurrencyApi
 {
-    // All amounts in the SageSwap API are in "gwei" (1 coin = 1_000_000_000)
-    private const long OneCoinGwei = 1_000_000_000;
-
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
 
     private static readonly JsonSerializerOptions JsonOpt = new()
@@ -19,20 +18,156 @@ public sealed class SageSwapClient : ISageSwapClient, IExchangeCurrencyApi
         PropertyNameCaseInsensitive = true
     };
 
+    // SageSwap quotes XMR<->USDT on ERC20 and SOL (NOT Tron). USDT is ~$1 on every
+    // chain, so for a price feed any of these is a valid USDT/XMR figure. Preference
+    // order; the board's USDT(TRC20) isn't offered for XMR so we fall back to ERC20.
+    private static readonly string[] UsdtPref =
+        { "USDTERC20", "USDTSOL", "USDTBSC", "USDTMATIC", "USDTARBITRUM", "USDTTRC20" };
+
     private readonly HttpClient http;
     private readonly SageSwapOptions opt;
+    private readonly string ratesXmlUrl;
+
+    // Short-lived cache so a sell+buy in the same refresh cycle = one feed fetch.
+    private static readonly TimeSpan FeedTtl = TimeSpan.FromSeconds(12);
+    private readonly SemaphoreSlim feedLock = new(1, 1);
+    private List<RateItem>? feedItems;
+    private DateTimeOffset feedAt;
 
     public string  ExchangeKey => "sageswap";
     public string  SiteName    => opt.SiteName;
     public string? SiteUrl     => opt.SiteUrl;
     public char PrivacyLevel => opt.PrivacyLevel;
     public decimal MinAmountUsd => opt.MinAmountUsd;
+
     public SageSwapClient(HttpClient http, IOptions<SageSwapOptions> options)
     {
         this.http = http;
         this.opt = options.Value;
+        // currencies.xml lives at the site root, not under /api — derive from the host.
+        this.ratesXmlUrl = new Uri(new Uri(opt.BaseUrl), "/currencies.xml").ToString();
     }
 
+    private sealed record RateItem(string From, string To, decimal In, decimal Out);
+
+    // SELL: 1 XMR -> USDT.  Feed row from=XMR, to=USDT* ; price = out/in (USDT per XMR).
+    public async Task<PriceResult?> GetSellPriceAsync(PriceQuery query, CancellationToken ct = default)
+    {
+        var items = await GetFeedAsync(ct);
+        var row = PickUsdtRow(items, fromXmr: true);
+        if (row is null || row.In <= 0 || row.Out <= 0) return null;
+
+        var usdtPerXmr = row.Out / row.In; // USDT received per 1 XMR sold
+        if (usdtPerXmr <= 0) return null;
+
+        return new PriceResult(ExchangeKey, query.Base, query.Quote, usdtPerXmr, DateTimeOffset.UtcNow);
+    }
+
+    // BUY: USDT -> 1 XMR.  Feed row from=USDT*, to=XMR ; price = in/out (USDT per XMR).
+    public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
+    {
+        var items = await GetFeedAsync(ct);
+        var row = PickUsdtRow(items, fromXmr: false);
+        if (row is null || row.In <= 0 || row.Out <= 0) return null;
+
+        var usdtPerXmr = row.In / row.Out; // USDT paid per 1 XMR bought
+        if (usdtPerXmr <= 0) return null;
+
+        return new PriceResult(ExchangeKey, query.Base, query.Quote, usdtPerXmr, DateTimeOffset.UtcNow);
+    }
+
+    // Pick the best XMR<->USDT row by USDT-chain preference, else any XMR<->USDT* row.
+    private static RateItem? PickUsdtRow(IReadOnlyList<RateItem> items, bool fromXmr)
+    {
+        foreach (var pref in UsdtPref)
+        {
+            var hit = items.FirstOrDefault(i => fromXmr
+                ? i.From.Equals("XMR", StringComparison.OrdinalIgnoreCase) &&
+                  i.To.Equals(pref, StringComparison.OrdinalIgnoreCase)
+                : i.To.Equals("XMR", StringComparison.OrdinalIgnoreCase) &&
+                  i.From.Equals(pref, StringComparison.OrdinalIgnoreCase));
+            if (hit is not null) return hit;
+        }
+
+        return items.FirstOrDefault(i => fromXmr
+            ? i.From.Equals("XMR", StringComparison.OrdinalIgnoreCase) &&
+              i.To.StartsWith("USDT", StringComparison.OrdinalIgnoreCase)
+            : i.To.Equals("XMR", StringComparison.OrdinalIgnoreCase) &&
+              i.From.StartsWith("USDT", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // =========================
+    // RATES FEED (BestChange-standard currencies.xml), cached briefly.
+    // =========================
+    private async Task<IReadOnlyList<RateItem>> GetFeedAsync(CancellationToken ct)
+    {
+        if (feedItems is not null && DateTimeOffset.UtcNow - feedAt < FeedTtl)
+            return feedItems;
+
+        await feedLock.WaitAsync(ct);
+        try
+        {
+            if (feedItems is not null && DateTimeOffset.UtcNow - feedAt < FeedTtl)
+                return feedItems;
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, ratesXmlUrl);
+            req.Headers.Accept.Clear();
+            req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
+            if (!string.IsNullOrWhiteSpace(opt.UserAgent))
+                req.Headers.UserAgent.ParseAdd(opt.UserAgent);
+
+            var res = await http.SendForStringWithTimeoutAsync(req, DefaultTimeout, ct);
+            if (res is null ||
+                res.StatusCode < HttpStatusCode.OK ||
+                res.StatusCode >= HttpStatusCode.MultipleChoices)
+            {
+                if (res is not null)
+                    Console.WriteLine($"[SAGESWAP] feed {(int)res.StatusCode} from {ratesXmlUrl}");
+                return feedItems ?? (IReadOnlyList<RateItem>)Array.Empty<RateItem>();
+            }
+
+            var parsed = ParseFeed(res.Body);
+            if (parsed.Count > 0)
+            {
+                feedItems = parsed;
+                feedAt = DateTimeOffset.UtcNow;
+            }
+            return feedItems ?? (IReadOnlyList<RateItem>)Array.Empty<RateItem>();
+        }
+        catch (OperationCanceledException)
+        {
+            return feedItems ?? (IReadOnlyList<RateItem>)Array.Empty<RateItem>();
+        }
+        finally { feedLock.Release(); }
+    }
+
+    private static List<RateItem> ParseFeed(string xml)
+    {
+        var list = new List<RateItem>();
+        try
+        {
+            var doc = XDocument.Parse(xml);
+            foreach (var item in doc.Descendants("item"))
+            {
+                var from = (string?)item.Element("from");
+                var to   = (string?)item.Element("to");
+                if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to)) continue;
+
+                if (!decimal.TryParse((string?)item.Element("in"),
+                        NumberStyles.Any, CultureInfo.InvariantCulture, out var inn)) continue;
+                if (!decimal.TryParse((string?)item.Element("out"),
+                        NumberStyles.Any, CultureInfo.InvariantCulture, out var outt)) continue;
+
+                list.Add(new RateItem(from.Trim(), to.Trim(), inn, outt));
+            }
+        }
+        catch { /* return whatever parsed */ }
+        return list;
+    }
+
+    // =========================
+    // CURRENCIES — still from the JSON API (unchanged) for IExchangeCurrencyApi.
+    // =========================
     public async Task<IReadOnlyList<ExchangeCurrency>> GetCurrenciesAsync(CancellationToken ct = default)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, "api/v1/currencies");
@@ -54,108 +189,8 @@ public sealed class SageSwapClient : ISageSwapClient, IExchangeCurrencyApi
             .Select(x => new ExchangeCurrency(
                 ExchangeId: x.FriendlyId,
                 Ticker: x.Ticker,
-                Network: x.Network?.Name ?? ""
-            ))
+                Network: x.Network?.Name ?? ""))
             .ToList();
-    }
-
-    // SELL: send 1 BASE → receive X QUOTE
-    // Uses input_currency_amount = 1 coin (gwei), reads outputCurrencyAmount
-    public async Task<PriceResult?> GetSellPriceAsync(PriceQuery query, CancellationToken ct = default)
-    {
-        var baseId = await ResolveFriendlyIdAsync(query.Base, ct);
-        var quoteId = await ResolveFriendlyIdAsync(query.Quote, ct);
-
-        if (string.IsNullOrWhiteSpace(baseId) || string.IsNullOrWhiteSpace(quoteId))
-            return null;
-
-        // Ask: if I send 1 XMR (1_000_000_000 gwei), how much USDT do I get?
-        var url =
-            $"api/v1/rate" +
-            $"?input_currency={Uri.EscapeDataString(baseId)}" +
-            $"&output_currency={Uri.EscapeDataString(quoteId)}" +
-            $"&input_currency_amount={OneCoinGwei}";
-
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        AddHeaders(req);
-
-        var res = await http.SendForStringWithTimeoutAsync(req, DefaultTimeout, ct);
-        if (res is null) return null;
-        if (res.StatusCode < HttpStatusCode.OK || res.StatusCode >= HttpStatusCode.MultipleChoices)
-            return null;
-
-        RateResponse? rate;
-        try { rate = JsonSerializer.Deserialize<RateResponse>(res.Body, JsonOpt); }
-        catch { return null; }
-
-        var outAmtGwei = rate?.Data?.OutputCurrencyAmount;
-        if (outAmtGwei is null || outAmtGwei <= 0) return null;
-
-        // outputCurrencyAmount is USDT in gwei → divide by 1e9 to get USDT coins
-        var quotePerOneBase = outAmtGwei.Value / (decimal)OneCoinGwei;
-
-        return new PriceResult(
-            Exchange: ExchangeKey,
-            Base: query.Base,
-            Quote: query.Quote,
-            Price: quotePerOneBase, // USDT received per 1 XMR sold
-            TimestampUtc: DateTimeOffset.UtcNow,
-            CorrelationId: res.CorrelationId,
-            Raw: null);
-    }
-
-    // BUY: how much QUOTE needed to receive 1 BASE
-    // output_currency_amount is unreliable — API returns inputCurrencyAmount for >1 XMR.
-    // Instead: probe with a real USDT input, then compute rate from BOTH returned values.
-    public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
-    {
-        var baseId = await ResolveFriendlyIdAsync(query.Base, ct);
-        var quoteId = await ResolveFriendlyIdAsync(query.Quote, ct);
-
-        if (string.IsNullOrWhiteSpace(baseId) || string.IsNullOrWhiteSpace(quoteId))
-            return null;
-
-        // Probe with 500 USDT — large enough to clear minimum trade size.
-        // We divide inputCurrencyAmount / outputCurrencyAmount to get USDT-per-XMR
-        // regardless of how many XMR the probe actually buys.
-        const long probeGwei = 500L * OneCoinGwei; // 500 USDT in gwei
-
-        var url =
-            $"api/v1/rate" +
-            $"?input_currency={Uri.EscapeDataString(quoteId)}" +  // USDT
-            $"&output_currency={Uri.EscapeDataString(baseId)}" +  // XMR
-            $"&input_currency_amount={probeGwei}";
-
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        AddHeaders(req);
-
-        var res = await http.SendForStringWithTimeoutAsync(req, DefaultTimeout, ct);
-        if (res is null) return null;
-        if (res.StatusCode < HttpStatusCode.OK || res.StatusCode >= HttpStatusCode.MultipleChoices)
-            return null;
-
-        RateResponse? rate;
-        try { rate = JsonSerializer.Deserialize<RateResponse>(res.Body, JsonOpt); }
-        catch { return null; }
-
-        var inGwei = rate?.Data?.InputCurrencyAmount;
-        var outGwei = rate?.Data?.OutputCurrencyAmount;
-
-        if (inGwei is null || inGwei <= 0) return null;
-        if (outGwei is null || outGwei <= 0) return null;
-
-        // Both values in gwei — ratio gives USDT per XMR directly:
-        // e.g. 500_000_000_000 USDT gwei / 1_447_000_000 XMR gwei = ~345.5 USDT per XMR
-        var usdtPerXmr = (decimal)inGwei.Value / (decimal)outGwei.Value;
-
-        return new PriceResult(
-            Exchange: ExchangeKey,
-            Base: query.Base,
-            Quote: query.Quote,
-            Price: usdtPerXmr,
-            TimestampUtc: DateTimeOffset.UtcNow,
-            CorrelationId: res.CorrelationId,
-            Raw: null);
     }
 
     private void AddHeaders(HttpRequestMessage req)
@@ -167,32 +202,7 @@ public sealed class SageSwapClient : ISageSwapClient, IExchangeCurrencyApi
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 
-    private async Task<string?> ResolveFriendlyIdAsync(AssetRef asset, CancellationToken ct)
-    {
-        if (!string.IsNullOrWhiteSpace(asset.ExchangeId))
-            return asset.ExchangeId;
-
-        var currencies = await GetCurrenciesAsync(ct);
-        if (currencies.Count == 0) return null;
-
-        var ticker = asset.Ticker.Trim();
-        var net = (asset.Network ?? "").Trim();
-
-        if (string.IsNullOrWhiteSpace(net))
-        {
-            return currencies.FirstOrDefault(c =>
-                c.Ticker.Equals(ticker, StringComparison.OrdinalIgnoreCase)
-            )?.ExchangeId;
-        }
-
-        return currencies.FirstOrDefault(c =>
-            c.Ticker.Equals(ticker, StringComparison.OrdinalIgnoreCase) &&
-            c.Network.Equals(net, StringComparison.OrdinalIgnoreCase)
-        )?.ExchangeId;
-    }
-
-    // ── DTOs ─────────────────────────────────────────────────────────────
-
+    // ── DTOs (currencies) ─────────────────────────────────────────────────
     private sealed class CurrenciesResponse
     {
         public List<CurrencyDto> Data { get; set; } = new();
@@ -208,19 +218,5 @@ public sealed class SageSwapClient : ISageSwapClient, IExchangeCurrencyApi
     private sealed class NetworkDto
     {
         public string Name { get; set; } = "";
-    }
-
-    private sealed class RateResponse
-    {
-        public RateData? Data { get; set; }
-    }
-
-    private sealed class RateData
-    {
-        // USDT gwei needed to send (used in buy: output_currency_amount query)
-        public long? InputCurrencyAmount { get; set; }
-
-        // USDT gwei received (used in sell: input_currency_amount query)
-        public long? OutputCurrencyAmount { get; set; }
     }
 }
