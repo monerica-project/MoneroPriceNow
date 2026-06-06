@@ -24,9 +24,18 @@ namespace ExchangeServices.Implementations;
 ///   is rate limited on GhostSwap's side, sends Cache-Control: max-age=10, and
 ///   returns GhostSwap's *best standard rate* — the same rate a direct GhostSwap
 ///   user gets. That standard rate is the competitive number worth showing, and
-///   is what the partner asked us to display. We must stay under ~60 req/min per
-///   server and cache results ~10–30s (handled upstream by PriceService's snapshot
-///   + refresh cadence; we also keep a tight currencies cache below).
+///   is what the partner asked us to display.
+///
+///   GhostSwap asks callers to cache ~10–30s and stay under ~60 req/min/server.
+///   We satisfy this WITHOUT caching here in the client: page loads are served
+///   from PriceService's latestRows snapshot, and the only live caller is
+///   PriceWarmingService, which refreshes on a fixed PriceService:WarmIntervalSeconds
+///   cadence (default 15s). Each cycle issues 1 sell + 1 buy quote for the warmed
+///   pair → ~8 req/min, well under the limit, ~15s fresh. Note the warmer evicts
+///   the per-exchange cache before each fetch, so the effective throttle is the
+///   warm interval (keep it ≥10s), NOT PriceService:PriceCacheSeconds (which only
+///   guards the cold-start path). If this client is ever called from a hotter path,
+///   add a short TTL cache here mirroring the currencies cache below.
 ///
 /// Auth (only still used for the catalog call): Authorization: Bearer {publicKey}:{secret}
 ///   - The colon-joined credential goes AFTER "Bearer ". No base64.
