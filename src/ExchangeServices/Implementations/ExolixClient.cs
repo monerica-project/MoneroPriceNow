@@ -18,14 +18,20 @@ public sealed class ExolixClient : IExolixClient
     public string? SiteUrl => opt.SiteUrl;
     public char PrivacyLevel => opt.PrivacyLevel;
 
-    // MinAmountUsd: returns the live API minimum when available, otherwise falls back to config.
-    // Populated in GetBuyPriceAsync where coinFrom = USDT, so minAmount is already in USD terms.
+    // MinAmountUsd: live API minimum when available (set in buy, where coinFrom = USDT ≈ USD).
     private decimal? _apiMinAmountUsd;
     private readonly object _apiMinAmountLock = new();
     public decimal MinAmountUsd => _apiMinAmountUsd ?? opt.MinAmountUsd;
 
-    // Always use float — fixed rates are consistently inflated
+    // Always use float — fixed rates are consistently inflated.
     private const string RateTypeFloat = "float";
+
+    // Exolix does NOT carry USDT on Tron, and routes XMR<->USDT on EVM/SOL chains.
+    // USDT is ~$1 on every chain, so any of these is a valid USDT/XMR price. ETH first;
+    // the working one is memoized so steady-state is a single rate call.
+    private static readonly string[] UsdtNetPref =
+        { "ETH", "SOL", "BSC", "MATIC", "ARBITRUM", "OPTIMISM", "AVAXC" };
+    private volatile string? _usdtNet;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -121,71 +127,28 @@ public sealed class ExolixClient : IExolixClient
     // ------------------------------------------------------------
     // Prices
     // ------------------------------------------------------------
-
     public Task<PriceResult?> GetPriceAsync(PriceQuery query, CancellationToken ct = default)
         => GetSellPriceAsync(query, ct);
 
-    // SELL: send 1 XMR → read toAmount (USDT received) directly
+    // SELL: send 1 XMR → read toAmount (USDT received) directly.
     public async Task<PriceResult?> GetSellPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
-        var (coinFrom, netFrom) = ResolveCoinAndNetwork(query.Base);
-        var (coinTo, netTo) = ResolveCoinAndNetwork(query.Quote);
-
-        if (string.IsNullOrWhiteSpace(coinFrom) || string.IsNullOrWhiteSpace(coinTo))
-            return null;
-
-        var rate = await GetRateAsync(
-            coinFrom: coinFrom,
-            networkFrom: netFrom,
-            coinTo: coinTo,
-            networkTo: netTo,
-            amount: 1m,
-            withdrawalAmount: null,
-            ct: ct
-        );
-
-        if (rate is null || rate.FromAmount <= 0 || rate.ToAmount <= 0)
-            return null;
+        var rate = await QuoteXmrUsdtAsync(query, usdtIsFrom: false, amount: 1m, ct);
+        if (rate is null || rate.FromAmount <= 0 || rate.ToAmount <= 0) return null;
 
         var px = rate.ToAmount / rate.FromAmount;
         if (px <= 0) return null;
 
-        return new PriceResult(
-            Exchange: ExchangeKey,
-            Base: query.Base,
-            Quote: query.Quote,
-            Price: px,
-            TimestampUtc: DateTimeOffset.UtcNow,
-            CorrelationId: null,
-            Raw: null
-        );
+        return new PriceResult(ExchangeKey, query.Base, query.Quote, px, DateTimeOffset.UtcNow);
     }
 
-    // BUY: how much USDT to send to receive 1 XMR
+    // BUY: how much USDT to send to receive 1 XMR.
     public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
-        var (baseCoin, baseNet) = ResolveCoinAndNetwork(query.Base);   // XMR
-        var (quoteCoin, quoteNet) = ResolveCoinAndNetwork(query.Quote);  // USDT
+        var rate = await QuoteXmrUsdtAsync(query, usdtIsFrom: true, amount: 500m, ct);
+        if (rate is null || rate.FromAmount <= 0 || rate.ToAmount <= 0) return null;
 
-        if (string.IsNullOrWhiteSpace(baseCoin) || string.IsNullOrWhiteSpace(quoteCoin))
-            return null;
-
-        const decimal probeUsdt = 500m;
-
-        var rate = await GetRateAsync(
-            coinFrom: quoteCoin,
-            networkFrom: quoteNet,
-            coinTo: baseCoin,
-            networkTo: baseNet,
-            amount: probeUsdt,
-            withdrawalAmount: null,
-            ct: ct
-        );
-
-        if (rate is null || rate.FromAmount <= 0 || rate.ToAmount <= 0)
-            return null;
-
-        // coinFrom is USDT here, so rate.MinAmount is in USDT ≈ USD — update MinAmountUsd.
+        // coinFrom is USDT here, so rate.MinAmount is in USDT ≈ USD.
         if (rate.MinAmount > 0)
         {
             lock (_apiMinAmountLock)
@@ -195,28 +158,51 @@ public sealed class ExolixClient : IExolixClient
         var usdtPerXmr = rate.FromAmount / rate.ToAmount;
         if (usdtPerXmr <= 0) return null;
 
-        return new PriceResult(
-            Exchange: ExchangeKey,
-            Base: query.Base,
-            Quote: query.Quote,
-            Price: usdtPerXmr,
-            TimestampUtc: DateTimeOffset.UtcNow,
-            CorrelationId: null,
-            Raw: null
-        );
+        return new PriceResult(ExchangeKey, query.Base, query.Quote, usdtPerXmr, DateTimeOffset.UtcNow);
+    }
+
+    // Quote XMR<->USDT, resolving the USDT side to a network Exolix actually pairs with
+    // XMR (never Tron). Tries the memoized network first, then the preference ladder.
+    private async Task<RateResponse?> QuoteXmrUsdtAsync(
+        PriceQuery query, bool usdtIsFrom, decimal amount, CancellationToken ct)
+    {
+        var xmr  = (query.Base.Ticker  ?? "XMR").Trim().ToUpperInvariant();
+        var usdt = (query.Quote.Ticker ?? "USDT").Trim().ToUpperInvariant();
+
+        var candidates = new List<string>();
+        var memo = _usdtNet;
+        if (memo is not null) candidates.Add(memo);
+        foreach (var n in UsdtNetPref)
+            if (!candidates.Contains(n, StringComparer.OrdinalIgnoreCase)) candidates.Add(n);
+
+        foreach (var net in candidates)
+        {
+            // XMR side needs no network; only the USDT side is network-qualified.
+            var rate = usdtIsFrom
+                ? await GetRateAsync(usdt, net, xmr, null, amount, ct)   // BUY:  USDT/net -> XMR
+                : await GetRateAsync(xmr, null, usdt, net, amount, ct);  // SELL: XMR -> USDT/net
+
+            if (rate is not null && rate.FromAmount > 0 && rate.ToAmount > 0)
+            {
+                if (!string.Equals(_usdtNet, net, StringComparison.OrdinalIgnoreCase))
+                {
+                    _usdtNet = net;
+                    Console.WriteLine($"[EXOLIX] resolved USDT network = {net} for the XMR pair");
+                }
+                return rate;
+            }
+        }
+
+        return null;
     }
 
     // ------------------------------------------------------------
     // Core rate call
     // ------------------------------------------------------------
     private async Task<RateResponse?> GetRateAsync(
-        string coinFrom,
-        string? networkFrom,
-        string coinTo,
-        string? networkTo,
-        decimal amount,
-        decimal? withdrawalAmount,
-        CancellationToken ct)
+        string coinFrom, string? networkFrom,
+        string coinTo, string? networkTo,
+        decimal amount, CancellationToken ct)
     {
         var qs = new List<string>
         {
@@ -231,9 +217,6 @@ public sealed class ExolixClient : IExolixClient
         if (!string.IsNullOrWhiteSpace(networkTo))
             qs.Add($"networkTo={Uri.EscapeDataString(networkTo)}");
 
-        if (withdrawalAmount is not null && withdrawalAmount.Value > 0)
-            qs.Add($"withdrawalAmount={withdrawalAmount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
-
         var url = "rate?" + string.Join("&", qs);
 
         var (status, raw) = await SendForStringWithRetryAsync(
@@ -243,6 +226,7 @@ public sealed class ExolixClient : IExolixClient
             ct: ct
         );
 
+        // 422 = "Such exchange pair is not available" for this network → try the next one.
         if (status is null || string.IsNullOrWhiteSpace(raw) || (int)status < 200 || (int)status >= 300)
             return null;
 
@@ -258,8 +242,10 @@ public sealed class ExolixClient : IExolixClient
         var req = new HttpRequestMessage(method, relativeUrl);
         req.Headers.TryAddWithoutValidation("Accept", "application/json");
 
-        if (!string.IsNullOrWhiteSpace(opt.ApiKey))
-            req.Headers.TryAddWithoutValidation("Authorization", opt.ApiKey);
+        // NOTE: /currencies and /rate are PUBLIC. Sending an Authorization header with a
+        // non-key value makes Exolix 400 the request, which is what broke the currency
+        // lookup. Auth is only needed for transaction creation, so it's intentionally
+        // not sent here.
 
         if (!req.Headers.UserAgent.Any() && !string.IsNullOrWhiteSpace(opt.UserAgent))
             req.Headers.UserAgent.ParseAdd(opt.UserAgent);
@@ -338,64 +324,8 @@ public sealed class ExolixClient : IExolixClient
     }
 
     // ------------------------------------------------------------
-    // Symbol + network mapping
+    // Network friendly-name mapping (for currency listing)
     // ------------------------------------------------------------
-    private static (string coin, string? network) ResolveCoinAndNetwork(AssetRef asset)
-    {
-        var ex = (asset.ExchangeId ?? "").Trim();
-        if (!string.IsNullOrWhiteSpace(ex))
-        {
-            if (ex.Contains('|'))
-            {
-                var parts = ex.Split('|', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                if (parts.Length == 2)
-                    return (parts[0].Trim().ToUpperInvariant(), NormalizeNetworkToExolix(parts[1]));
-            }
-            else
-            {
-                var coinOnly = ex.Trim().ToUpperInvariant();
-                if (coinOnly.All(char.IsLetterOrDigit))
-                    return (coinOnly, null);
-            }
-        }
-
-        var ticker = (asset.Ticker ?? "").Trim().ToUpperInvariant();
-        if (string.IsNullOrWhiteSpace(ticker)) return ("", null);
-
-        return (ticker, NormalizeNetworkToExolix(asset.Network));
-    }
-
-    private static string? NormalizeNetworkToExolix(string? network)
-    {
-        if (string.IsNullOrWhiteSpace(network)) return null;
-
-        var n = network.Trim();
-
-        var mapped = n switch
-        {
-            "Tron" => "TRX",
-            "TRC20" => "TRX",
-            "Ethereum" => "ETH",
-            "ERC20" => "ETH",
-            "Binance Smart Chain" => "BSC",
-            "BEP20" => "BSC",
-            "Solana" => "SOL",
-            "Bitcoin" => "BTC",
-            "Monero" => "XMR",
-            "Litecoin" => "LTC",
-            "Arbitrum" => "ARB",
-            "Base" => "BASE",
-            _ => ""
-        };
-
-        if (!string.IsNullOrWhiteSpace(mapped)) return mapped;
-
-        var upper = n.ToUpperInvariant();
-        if (upper.Length <= 16 && upper.All(char.IsLetterOrDigit)) return upper;
-
-        return null;
-    }
-
     private static string FriendlyNetworkFromExolix(string netCode, string? name, string? shortName)
     {
         var sc = (shortName ?? "").Trim().ToUpperInvariant();
