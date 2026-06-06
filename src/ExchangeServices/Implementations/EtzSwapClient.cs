@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -17,16 +18,31 @@ public sealed class EtzSwapClient : IEtzSwapClient
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
+    // Network preference for MULTI-network coins (e.g. USDT). For a price feed the chain
+    // is immaterial (USDT ~= $1 on every chain), and Etz confirmed it does NOT pair
+    // USDT-Tron(TRX) with XMR but DOES pair USDT-ETH/SOL/BSC with XMR. So we try broadly
+    // routable networks first and let the first one that quotes win (then it's memoized).
+    private static readonly string[] NetworkPreference =
+        { "ETH", "SOL", "BSC", "MATIC", "ARBITRUM", "OPTIMISM", "TON", "CELO", "TRX" };
+
     private readonly HttpClient http;
     private readonly EtzSwapOptions opt;
     private decimal _liveMinAmountUsd;
+
+    // Etz catalog: COIN -> its networks. The network "Key" is what the rate endpoint
+    // wants (USDT -> "TRX"/"ETH"/..., XMR -> "XMR"). Loaded once.
+    private IReadOnlyDictionary<string, List<NetInfo>>? _catalog;
+    private readonly SemaphoreSlim _catalogLock = new(1, 1);
+
+    // Memoizes the (networkFrom, networkTo) that returned 2xx for a coinFrom->coinTo,
+    // so steady-state is ONE request per quote with no discovery noise.
+    private readonly ConcurrentDictionary<string, (string From, string To)> _resolved = new();
 
     public string ExchangeKey => "etzswap";
     public string SiteName => opt.SiteName;
     public string? SiteUrl => opt.SiteUrl;
     public char PrivacyLevel => opt.PrivacyLevel;
 
-    // Returns live value once we have one, falls back to config
     public decimal MinAmountUsd => _liveMinAmountUsd > 0 ? _liveMinAmountUsd : opt.MinAmountUsd;
 
     public EtzSwapClient(HttpClient http, IOptions<EtzSwapOptions> options)
@@ -35,159 +51,307 @@ public sealed class EtzSwapClient : IEtzSwapClient
         this.opt = options.Value;
     }
 
+    private sealed record NetInfo(string Key, string Short, string Full);
+
     // =========================
-    // SELL: send 1 XMR → read amountTo (USDT) directly
+    // SELL: 1 XMR -> read amountTo (USDT)
     // =========================
     public async Task<PriceResult?> GetSellPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
-        var (coinFrom, networksFrom) = ResolveCoinAndNetworks(query.Base);
-        var (coinTo, networksTo) = ResolveCoinAndNetworks(query.Quote);
+        var data = await ResolveAndQuoteAsync(query.Base, query.Quote, amountFrom: 1m, ct);
+        if (data is null) return null;
 
-        if (string.IsNullOrWhiteSpace(coinFrom) || string.IsNullOrWhiteSpace(coinTo))
-            return null;
+        var from = data.AmountFrom;
+        var to = data.AmountTo;
+        if (from <= 0 || to <= 0) return null;
 
-        foreach (var netFrom in networksFrom)
-            foreach (var netTo in networksTo)
-            {
-                var dto = await GetRateAsync(
-                    coinFrom: coinFrom,
-                    networkFrom: netFrom,
-                    coinTo: coinTo,
-                    networkTo: netTo,
-                    rateType: "float",
-                    amountFrom: 1m,
-                    amountTo: null,
-                    ct: ct
-                );
+        var usdtPerXmr = to / from;
+        if (usdtPerXmr <= 0) return null;
 
-                if (dto?.Data is null) continue;
-
-                var fromAmt = dto.Data.AmountFrom;
-                var toAmt = dto.Data.AmountTo;
-                if (fromAmt <= 0 || toAmt <= 0) continue;
-
-                var usdtPerXmr = toAmt / fromAmt;
-                if (usdtPerXmr <= 0) continue;
-
-                return new PriceResult(
-                    Exchange: ExchangeKey,
-                    Base: query.Base,
-                    Quote: query.Quote,
-                    Price: usdtPerXmr,
-                    TimestampUtc: DateTimeOffset.UtcNow,
-                    CorrelationId: null,
-                    Raw: null
-                );
-            }
-
-        return null;
+        return new PriceResult(ExchangeKey, query.Base, query.Quote, usdtPerXmr, DateTimeOffset.UtcNow);
     }
 
     // =========================
-    // BUY: ? USDT → 1 XMR
-    // Probe with amountFrom=500 USDT, read amountTo (XMR), divide.
-    // Also caches minAmountFrom (in USDT) as a side-effect.
-    //
-    // DO NOT use amountTo=1 approach — distorts the rate.
+    // BUY: probe 500 USDT -> read amountTo (XMR), divide. Caches USD minimum.
     // =========================
     public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
-        var (coinFrom, networksFrom) = ResolveCoinAndNetworks(query.Quote); // USDT
-        var (coinTo, networksTo) = ResolveCoinAndNetworks(query.Base);  // XMR
+        // from = USDT (query.Quote), to = XMR (query.Base)
+        var data = await ResolveAndQuoteAsync(query.Quote, query.Base, amountFrom: 500m, ct);
+        if (data is null) return null;
 
-        if (string.IsNullOrWhiteSpace(coinFrom) || string.IsNullOrWhiteSpace(coinTo))
-            return null;
+        if (data.MinAmountFrom > 0)
+            _liveMinAmountUsd = data.MinAmountFrom;
 
-        const decimal probeUsdt = 500m;
+        var from = data.AmountFrom;
+        var to = data.AmountTo;
+        if (from <= 0 || to <= 0) return null;
 
-        foreach (var netFrom in networksFrom)
-            foreach (var netTo in networksTo)
+        var usdtPerXmr = from / to;
+        if (usdtPerXmr <= 0) return null;
+
+        return new PriceResult(ExchangeKey, query.Base, query.Quote, usdtPerXmr, DateTimeOffset.UtcNow);
+    }
+
+    // =========================
+    // RESOLVE (from catalog) + QUOTE — memoized; steady-state is one request.
+    // =========================
+    private async Task<RateData?> ResolveAndQuoteAsync(
+        AssetRef fromAsset, AssetRef toAsset, decimal amountFrom, CancellationToken ct)
+    {
+        var coinFrom = CoinCode(fromAsset);
+        var coinTo = CoinCode(toAsset);
+        if (coinFrom is null || coinTo is null) return null;
+
+        var key = $"{coinFrom}->{coinTo}";
+
+        // Fast path: reuse the network combo that worked last time.
+        if (_resolved.TryGetValue(key, out var known))
+        {
+            var hit = await GetRateAsync(coinFrom, known.From, coinTo, known.To, amountFrom, ct);
+            if (hit?.Data is not null) return hit.Data;
+            _resolved.TryRemove(key, out _); // stale — re-discover
+        }
+
+        // Discovery: try candidate networks (catalog-driven, preference-ordered),
+        // keep the first combo that returns a quote, and memoize it.
+        var fromNets = await NetworkCandidatesAsync(fromAsset, ct);
+        var toNets = await NetworkCandidatesAsync(toAsset, ct);
+
+        foreach (var netFrom in fromNets)
+            foreach (var netTo in toNets)
             {
-                var dto = await GetRateAsync(
-                    coinFrom: coinFrom,
-                    networkFrom: netFrom,
-                    coinTo: coinTo,
-                    networkTo: netTo,
-                    rateType: "float",
-                    amountFrom: probeUsdt,
-                    amountTo: null,
-                    ct: ct
-                );
-
+                var dto = await GetRateAsync(coinFrom, netFrom, coinTo, netTo, amountFrom, ct);
                 if (dto?.Data is null) continue;
 
-                // Cache live minimum — minAmountFrom is in USDT here
-                if (dto.Data.MinAmountFrom > 0)
-                    _liveMinAmountUsd = dto.Data.MinAmountFrom;
-
-                var fromAmt = dto.Data.AmountFrom;
-                var toAmt = dto.Data.AmountTo;
-                if (fromAmt <= 0 || toAmt <= 0) continue;
-
-                var usdtPerXmr = fromAmt / toAmt;
-                if (usdtPerXmr <= 0) continue;
-
-                return new PriceResult(
-                    Exchange: ExchangeKey,
-                    Base: query.Base,
-                    Quote: query.Quote,
-                    Price: usdtPerXmr,
-                    TimestampUtc: DateTimeOffset.UtcNow,
-                    CorrelationId: null,
-                    Raw: null
-                );
+                _resolved[key] = (netFrom, netTo);
+                Console.WriteLine($"[ETZSWAP] resolved {coinFrom}/{netFrom} -> {coinTo}/{netTo}");
+                return dto.Data;
             }
 
         return null;
     }
 
-    // =========================
-    // CURRENCIES
-    // =========================
-    public async Task<IReadOnlyList<ExchangeCurrency>> GetCurrenciesAsync(CancellationToken ct = default)
+    // Ordered network tokens to try for an asset, sourced from Etz's own catalog.
+    // Single-network coins (XMR) -> their one network. Multi-network coins (USDT) ->
+    // all their networks, ordered by NetworkPreference so a broadly-routable chain is
+    // tried first (Etz won't pair USDT-Tron with XMR, but USDT-ETH/SOL/BSC work).
+    private async Task<List<string>> NetworkCandidatesAsync(AssetRef asset, CancellationToken ct)
     {
-        var urlsToTry = new[]
+        var coin = CoinCode(asset) ?? "";
+        var cat = await GetCatalogAsync(ct);
+
+        var nets = cat.TryGetValue(coin, out var infos) && infos.Count > 0
+            ? infos.Select(i => i.Key).Where(k => !string.IsNullOrWhiteSpace(k)).ToList()
+            : new List<string>();
+
+        if (nets.Count == 1) return nets;
+
+        if (nets.Count == 0)
         {
-            "/api/v1/deposit/public/coins?page=1&limit=250",
-            "/api/v1/deposit/public/coins?page=1&size=250",
-            "/api/v1/deposit/public/coins?limit=250&offset=0",
+            var fb = FallbackNetwork(asset);
+            return fb is null ? new List<string>() : new List<string> { fb };
+        }
+
+        // Multi-network: order by preference, then any remaining catalog networks.
+        return nets
+            .OrderBy(n =>
+            {
+                var i = Array.FindIndex(NetworkPreference,
+                    p => p.Equals(n, StringComparison.OrdinalIgnoreCase));
+                return i < 0 ? int.MaxValue : i;
+            })
+            .ThenBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string? FallbackNetwork(AssetRef asset)
+    {
+        var net = (asset.Network ?? "").Trim();
+        var ticker = (asset.Ticker ?? "").Trim().ToUpperInvariant();
+
+        if (string.IsNullOrEmpty(net) || net.Equals(ticker, StringComparison.OrdinalIgnoreCase))
+            return ticker; // native: XMR -> "XMR"
+
+        return net.ToUpperInvariant() switch
+        {
+            "TRON" or "TRC20" => "ETH",   // Etz doesn't route USDT-Tron to XMR; ETH does.
+            "ETHEREUM" or "ERC20" => "ETH",
+            "BINANCE SMART CHAIN" or "BEP20" => "BSC",
+            "SOLANA" => "SOL",
+            "POLYGON" => "MATIC",
+            var x => x
+        };
+    }
+
+    // =========================
+    // CATALOG  (/coins, fetched once)
+    // =========================
+    private async Task<IReadOnlyDictionary<string, List<NetInfo>>> GetCatalogAsync(CancellationToken ct)
+    {
+        if (_catalog is not null) return _catalog;
+
+        await _catalogLock.WaitAsync(ct);
+        try
+        {
+            if (_catalog is not null) return _catalog;
+
+            var raw = await FetchCoinsRawAsync(ct);
+            var map = raw is null
+                ? new Dictionary<string, List<NetInfo>>(StringComparer.OrdinalIgnoreCase)
+                : ParseCatalog(raw);
+
+            _catalog = map;
+
+            string Nets(string c) => map.TryGetValue(c, out var l) && l.Count > 0
+                ? string.Join(",", l.Select(x => x.Key)) : "(none)";
+            Console.WriteLine($"[ETZSWAP] catalog: {map.Count} coins. USDT=[{Nets("USDT")}] XMR=[{Nets("XMR")}]");
+
+            return _catalog;
+        }
+        catch (OperationCanceledException)
+        {
+            return new Dictionary<string, List<NetInfo>>(StringComparer.OrdinalIgnoreCase);
+        }
+        finally { _catalogLock.Release(); }
+    }
+
+    private async Task<string?> FetchCoinsRawAsync(CancellationToken ct)
+    {
+        var urls = new[]
+        {
+            "/api/v1/deposit/public/coins?page=1&limit=500",
             "/api/v1/deposit/public/coins"
         };
 
-        foreach (var url in urlsToTry)
+        foreach (var url in urls)
         {
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 AddAuthHeaders(req);
-
                 using var resp = await http.SendAsync(req, ct);
                 var raw = await resp.Content.ReadAsStringAsync(ct);
-
-                if (!resp.IsSuccessStatusCode) continue;
-
-                var list = ParseCoins(raw);
-                if (list.Count > 0) return list;
+                if (resp.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(raw))
+                    return raw;
             }
             catch (HttpRequestException) { }
-            catch (OperationCanceledException) { return Array.Empty<ExchangeCurrency>(); }
+            catch (OperationCanceledException) { return null; }
         }
+        return null;
+    }
 
-        return Array.Empty<ExchangeCurrency>();
+    // Real Etz shape: { "data": { "coins": [ { "name": "...", "networks": { "KEY": { shortName, fullName } } } ] } }
+    private static Dictionary<string, List<NetInfo>> ParseCatalog(string raw)
+    {
+        var map = new Dictionary<string, List<NetInfo>>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var doc = JsonDocument.Parse(raw);
+            var root = doc.RootElement;
+
+            JsonElement arr;
+            if (root.ValueKind == JsonValueKind.Object &&
+                root.TryGetProperty("data", out var dataEl))
+            {
+                if (dataEl.ValueKind == JsonValueKind.Object &&
+                    dataEl.TryGetProperty("coins", out var coinsEl) &&
+                    coinsEl.ValueKind == JsonValueKind.Array)
+                    arr = coinsEl;
+                else if (dataEl.ValueKind == JsonValueKind.Array)
+                    arr = dataEl;
+                else return map;
+            }
+            else if (root.ValueKind == JsonValueKind.Object &&
+                     root.TryGetProperty("coins", out var coinsEl2) &&
+                     coinsEl2.ValueKind == JsonValueKind.Array)
+                arr = coinsEl2;
+            else if (root.ValueKind == JsonValueKind.Array)
+                arr = root;
+            else return map;
+
+            foreach (var item in arr.EnumerateArray())
+            {
+                var name = Str(item, "name") ?? Str(item, "code") ?? Str(item, "ticker") ?? Str(item, "symbol");
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                var coin = name.Trim().ToUpperInvariant();
+
+                var nets = new List<NetInfo>();
+
+                if (item.TryGetProperty("networks", out var netsEl))
+                {
+                    if (netsEl.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var prop in netsEl.EnumerateObject())
+                        {
+                            var key = prop.Name?.Trim() ?? "";
+                            if (key.Length == 0) continue;
+                            var sShort = Str(prop.Value, "shortName") ?? key;
+                            var sFull = Str(prop.Value, "fullName") ?? "";
+                            nets.Add(new NetInfo(key, sShort, sFull));
+                        }
+                    }
+                    else if (netsEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var n in netsEl.EnumerateArray())
+                        {
+                            string? key = n.ValueKind == JsonValueKind.String
+                                ? n.GetString()
+                                : (Str(n, "shortName") ?? Str(n, "network") ?? Str(n, "code") ?? Str(n, "name"));
+                            if (string.IsNullOrWhiteSpace(key)) continue;
+                            nets.Add(new NetInfo(key.Trim(), Str(n, "shortName") ?? key.Trim(), Str(n, "fullName") ?? ""));
+                        }
+                    }
+                }
+                else
+                {
+                    var flat = Str(item, "network") ?? Str(item, "networkCode");
+                    if (!string.IsNullOrWhiteSpace(flat))
+                        nets.Add(new NetInfo(flat.Trim(), flat.Trim(), ""));
+                }
+
+                if (nets.Count > 0)
+                    map[coin] = nets;
+            }
+        }
+        catch { /* keep whatever parsed */ }
+        return map;
+
+        static string? Str(JsonElement e, string prop)
+            => e.ValueKind == JsonValueKind.Object &&
+               e.TryGetProperty(prop, out var v) &&
+               v.ValueKind == JsonValueKind.String
+               ? v.GetString()
+               : null;
     }
 
     // =========================
-    // RATE CALL
+    // CURRENCIES (from the same cached catalog)
+    // =========================
+    public async Task<IReadOnlyList<ExchangeCurrency>> GetCurrenciesAsync(CancellationToken ct = default)
+    {
+        var cat = await GetCatalogAsync(ct);
+        var list = new List<ExchangeCurrency>();
+        foreach (var (coin, nets) in cat)
+            foreach (var n in nets)
+                list.Add(new ExchangeCurrency(
+                    ExchangeId: coin,
+                    Ticker: coin,
+                    Network: NormalizeNetworkLabel(coin, n.Key)));
+
+        return list
+            .DistinctBy(x => (x.Ticker, x.Network))
+            .OrderBy(x => x.Ticker)
+            .ThenBy(x => x.Network)
+            .ToList();
+    }
+
+    // =========================
+    // RATE CALL — logs the real error body on non-2xx.
     // =========================
     private async Task<RateResponse?> GetRateAsync(
-        string coinFrom,
-        string networkFrom,
-        string coinTo,
-        string networkTo,
-        string rateType,
-        decimal? amountFrom,
-        decimal? amountTo,
-        CancellationToken ct)
+        string coinFrom, string networkFrom, string coinTo, string networkTo,
+        decimal amountFrom, CancellationToken ct)
     {
         var qs = new List<string>
         {
@@ -195,14 +359,9 @@ public sealed class EtzSwapClient : IEtzSwapClient
             $"networkFrom={Uri.EscapeDataString(networkFrom)}",
             $"coinTo={Uri.EscapeDataString(coinTo)}",
             $"networkTo={Uri.EscapeDataString(networkTo)}",
-            $"rateType={Uri.EscapeDataString(rateType)}"
+            "rateType=float",
+            $"amountFrom={amountFrom.ToString(CultureInfo.InvariantCulture)}"
         };
-
-        if (amountFrom is not null)
-            qs.Add($"amountFrom={amountFrom.Value.ToString(CultureInfo.InvariantCulture)}");
-
-        if (amountTo is not null)
-            qs.Add($"amountTo={amountTo.Value.ToString(CultureInfo.InvariantCulture)}");
 
         var url = "/api/v1/deposit/public/rate?" + string.Join("&", qs);
 
@@ -214,12 +373,22 @@ public sealed class EtzSwapClient : IEtzSwapClient
             using var resp = await http.SendAsync(req, ct);
             var raw = await resp.Content.ReadAsStringAsync(ct);
 
-            if (!resp.IsSuccessStatusCode) return null;
+            if (!resp.IsSuccessStatusCode)
+            {
+                Console.WriteLine(
+                    $"[ETZSWAP] {(int)resp.StatusCode} {coinFrom}/{networkFrom}->{coinTo}/{networkTo} body={Trim(raw)}");
+                return null;
+            }
 
             return JsonSerializer.Deserialize<RateResponse>(raw, JsonOpt);
         }
         catch (HttpRequestException) { return null; }
         catch (OperationCanceledException) { return null; }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"[ETZSWAP] parse error: {ex.Message}");
+            return null;
+        }
     }
 
     // =========================
@@ -238,90 +407,10 @@ public sealed class EtzSwapClient : IEtzSwapClient
             req.Headers.TryAddWithoutValidation("X-API-KEY-VERSION", opt.ApiKeyVersion);
     }
 
-    private static (string Coin, string[] NetworksToTry) ResolveCoinAndNetworks(AssetRef asset)
+    private static string? CoinCode(AssetRef a)
     {
-        var coin = (asset.ExchangeId ?? asset.Ticker ?? "").Trim().ToUpperInvariant();
-        if (string.IsNullOrWhiteSpace(coin)) return ("", Array.Empty<string>());
-
-        var net = ToEtzNetwork(asset.Ticker ?? "", asset.Network);
-
-        if (asset.Network?.Equals("Tron", StringComparison.OrdinalIgnoreCase) == true ||
-            net.Equals("TRX", StringComparison.OrdinalIgnoreCase) ||
-            net.Equals("TRON", StringComparison.OrdinalIgnoreCase))
-        {
-            return (coin, new[] { "TRX", "TRC20", "TRON" }
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
-        }
-
-        return (coin, new[] { net });
-    }
-
-    private static string ToEtzNetwork(string ticker, string? network)
-    {
-        if (string.IsNullOrWhiteSpace(network))
-            return ticker.Trim().ToUpperInvariant();
-
-        return network.Trim() switch
-        {
-            "Mainnet" => ticker.Trim().ToUpperInvariant(),
-            "Tron" => "TRX",
-            "Ethereum" => "ETH",
-            "Binance Smart Chain" => "BSC",
-            "Solana" => "SOL",
-            "Arbitrum" => "ARBITRUM",
-            "Base" => "BASE",
-            "Polygon" => "MATIC",
-            var n => n.ToUpperInvariant()
-        };
-    }
-
-    private static List<ExchangeCurrency> ParseCoins(string raw)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(raw);
-            var root = doc.RootElement;
-
-            JsonElement arr;
-            if (root.ValueKind == JsonValueKind.Object &&
-                root.TryGetProperty("data", out var dataEl) &&
-                dataEl.ValueKind == JsonValueKind.Array)
-                arr = dataEl;
-            else if (root.ValueKind == JsonValueKind.Array)
-                arr = root;
-            else
-                return new List<ExchangeCurrency>();
-
-            var list = new List<ExchangeCurrency>();
-
-            foreach (var item in arr.EnumerateArray())
-            {
-                var code =
-                    (item.TryGetProperty("code", out var c1) ? c1.GetString() : null) ??
-                    (item.TryGetProperty("ticker", out var c2) ? c2.GetString() : null) ??
-                    (item.TryGetProperty("symbol", out var c3) ? c3.GetString() : null);
-
-                if (string.IsNullOrWhiteSpace(code)) continue;
-
-                var network =
-                    (item.TryGetProperty("network", out var n1) ? n1.GetString() : null) ??
-                    (item.TryGetProperty("networkCode", out var n2) ? n2.GetString() : null);
-
-                var netLabel = NormalizeNetworkLabel(code!, network);
-
-                list.Add(new ExchangeCurrency(
-                    ExchangeId: code!.Trim().ToUpperInvariant(),
-                    Ticker: code!.Trim().ToUpperInvariant(),
-                    Network: netLabel
-                ));
-            }
-
-            return list
-                .OrderBy(x => x.Ticker)
-                .ThenBy(x => x.Network)
-                .ToList();
-        }
-        catch { return new List<ExchangeCurrency>(); }
+        var c = (a.ExchangeId ?? a.Ticker ?? "").Trim().ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(c) ? null : c;
     }
 
     private static string NormalizeNetworkLabel(string ticker, string? network)
@@ -329,20 +418,22 @@ public sealed class EtzSwapClient : IEtzSwapClient
         if (string.IsNullOrWhiteSpace(network)) return "Mainnet";
 
         var n = network.Trim().ToUpperInvariant();
-
         return n switch
         {
             "TRX" or "TRON" or "TRC20" => "Tron",
             "ETH" or "ERC20" => "Ethereum",
-            "BSC" => "Binance Smart Chain",
+            "BSC" or "BEP20" => "Binance Smart Chain",
             "SOL" => "Solana",
-            "ARBITRUM" => "Arbitrum",
+            "ARBITRUM" or "ARB" => "Arbitrum",
             "BASE" => "Base",
             "MATIC" or "POLYGON" => "Polygon",
+            "TON" => "TON",
             _ when n == ticker.Trim().ToUpperInvariant() => "Mainnet",
-            _ => n
+            _ => network.Trim()
         };
     }
+
+    private static string Trim(string s) => string.IsNullOrEmpty(s) ? "" : (s.Length <= 300 ? s : s[..300]);
 
     // =========================
     // DTOs
