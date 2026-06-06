@@ -45,10 +45,11 @@ public static class ServiceCollectionExtensions
         services.AddStereoSwap(config);
         services.AddSwapter(config);
         services.AddBitXChange(config);
-
-
         services.AddCypherGoat(config);
         services.AddTrocador(config);
+        services.AddZeroTrace(config);
+        services.AddGhostSwap(config);
+
         //  services.AddChangeHero(config);
 
         //        services.AddDevilExchange(config);
@@ -71,6 +72,85 @@ public static class ServiceCollectionExtensions
 
         // services.AddXChange(config);
         //
+        return services;
+    }
+
+    public static IServiceCollection AddZeroTrace(this IServiceCollection services, IConfiguration config)
+    {
+        services.Configure<ZeroTraceOptions>(config.GetSection("ZeroTrace"));
+
+        services.AddHttpClient<IZeroTraceClient, ZeroTraceClient>()
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var opt = sp.GetRequiredService<IOptions<ZeroTraceOptions>>().Value;
+
+                client.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/");
+                client.Timeout = Timeout.InfiniteTimeSpan; // SafeHttp handles per-attempt timeouts
+
+                if (client.DefaultRequestHeaders.Accept.Count == 0)
+                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                if (client.DefaultRequestHeaders.UserAgent.Count == 0 &&
+                    !string.IsNullOrWhiteSpace(opt.UserAgent))
+                {
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd(opt.UserAgent);
+                }
+            });
+
+        services.AddTransient<IExchangePriceApi>(sp => sp.GetRequiredService<IZeroTraceClient>());
+        services.AddTransient<IExchangeBuyPriceApi>(sp => sp.GetRequiredService<IZeroTraceClient>());
+        services.AddTransient<IExchangeCurrencyApi>(sp => sp.GetRequiredService<IZeroTraceClient>());
+
+        return services;
+    }
+
+
+    public static IServiceCollection AddGhostSwap(this IServiceCollection services, IConfiguration config)
+    {
+        services.Configure<GhostSwapOptions>(config.GetSection("GhostSwap"));
+    
+        services.AddHttpClient<IGhostSwapClient, GhostSwapClient>()
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var opt = sp.GetRequiredService<IOptions<GhostSwapOptions>>().Value;
+    
+                client.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/");
+                client.Timeout = Timeout.InfiniteTimeSpan; // SafeHttp handles per-attempt timeouts
+    
+                if (client.DefaultRequestHeaders.Accept.Count == 0)
+                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    
+                if (client.DefaultRequestHeaders.UserAgent.Count == 0 &&
+                    !string.IsNullOrWhiteSpace(opt.UserAgent))
+                {
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd(opt.UserAgent);
+                }
+    
+                // Force HTTP/1.1 — Railway edge + Linux .NET ALPN/H2 handshake hangs (same
+                // workaround as AddCCECash). Without this the request goes out but no response
+                // ever comes back; we just see TaskCanceledException after the SafeHttp timeout.
+                client.DefaultRequestVersion = HttpVersion.Version11;
+                client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AutomaticDecompression = DecompressionMethods.All,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                SslOptions = new SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                    // Advertise only HTTP/1.1 in ALPN — avoids h2 negotiation issues on Linux/OpenSSL
+                    ApplicationProtocols = new List<SslApplicationProtocol>
+                    {
+                        SslApplicationProtocol.Http11
+                    }
+                }
+            });
+    
+        services.AddTransient<IExchangePriceApi>(sp => sp.GetRequiredService<IGhostSwapClient>());
+        services.AddTransient<IExchangeBuyPriceApi>(sp => sp.GetRequiredService<IGhostSwapClient>());
+        services.AddTransient<IExchangeCurrencyApi>(sp => sp.GetRequiredService<IGhostSwapClient>());
+    
         return services;
     }
 
