@@ -1,0 +1,82 @@
+@page
+@model AboutModel
+@{
+    ViewData["Title"] = "About — MoneroPriceNow";
+}
+
+<style>
+    .mpn-page {
+        max-width: 760px;
+        margin: 2.5rem auto 4rem;
+        padding: 0 1.25rem;
+        font-family: var(--sans);
+        color: var(--text);
+    }
+    .mpn-page h1 {
+        font-family: var(--mono);
+        font-size: 1.6rem;
+        letter-spacing: -.01em;
+        margin-bottom: 1.25rem;
+        color: var(--text);
+    }
+    .mpn-page h2 {
+        font-family: var(--mono);
+        font-size: 1.05rem;
+        margin: 2rem 0 .65rem;
+        color: var(--xmr-orange2);
+    }
+    .mpn-page p {
+        line-height: 1.7;
+        margin-bottom: 1rem;
+        color: var(--text);
+    }
+    .mpn-page a {
+        color: var(--xmr-orange2);
+        text-decoration: none;
+        border-bottom: 1px solid rgba(242,104,34,.35);
+    }
+    .mpn-page a:hover { border-bottom-color: var(--xmr-orange2); }
+    .mpn-card {
+        background: var(--surface, #161109);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.25rem 1.4rem;
+        margin: 1.25rem 0;
+    }
+    .mpn-muted { color: var(--text-muted); font-size: .92rem; }
+</style>
+
+<div class="mpn-page">
+    <h1>About MoneroPriceNow</h1>
+
+    <p>
+        MoneroPriceNow is a project from
+        <a href="https://monerica.com" rel="noopener">Monerica</a>.
+        It aggregates live, no-KYC Monero (XMR) exchange rates from dozens of
+        exchanges in one place, so you can compare buy and sell prices, spreads,
+        and minimums at a glance.
+    </p>
+
+    <div class="mpn-card">
+        <p style="margin-bottom:.5rem;">
+            Monerica is a curated directory of merchants, services, and resources
+            in the Monero ecosystem.
+        </p>
+        <p class="mpn-muted" style="margin-bottom:0;">
+            Learn more at <a href="https://monerica.com" rel="noopener">monerica.com</a>.
+        </p>
+    </div>
+
+    <h2>Open source</h2>
+    <p>
+        The code behind MoneroPriceNow is public. You can review it on
+        <a href="https://github.com/monerica-project/MoneroPriceNow" rel="noopener" target="_blank">GitHub</a>.
+    </p>
+
+    <h2>Sponsors</h2>
+    <p>
+        MoneroPriceNow displays Monerica's sponsors. See the
+        <a href="~/sponsors">sponsors page</a> for the current list and how to
+        become one.
+    </p>
+</div>

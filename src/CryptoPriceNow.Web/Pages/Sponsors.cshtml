@@ -1,0 +1,146 @@
+@page
+@model SponsorsModel
+@{
+    ViewData["Title"] = "Sponsors — MoneroPriceNow";
+}
+
+<style>
+    .mpn-page {
+        max-width: 860px;
+        margin: 2.5rem auto 4rem;
+        padding: 0 1.25rem;
+        font-family: var(--sans);
+        color: var(--text);
+    }
+    .mpn-page h1 {
+        font-family: var(--mono);
+        font-size: 1.6rem;
+        letter-spacing: -.01em;
+        margin-bottom: 1rem;
+        color: var(--text);
+    }
+    .mpn-intro { line-height: 1.7; margin-bottom: 1.5rem; }
+    .mpn-page a { color: var(--xmr-orange2); text-decoration: none; }
+    .mpn-page a:hover { text-decoration: underline; }
+
+    .mpn-cta {
+        display: inline-block;
+        margin: .25rem 0 2rem;
+        padding: .7rem 1.25rem;
+        border-radius: 8px;
+        background: var(--xmr-orange);
+        color: #1a0f06;
+        font-family: var(--mono);
+        font-weight: 600;
+        letter-spacing: .01em;
+        border: 1px solid var(--xmr-orange);
+    }
+    .mpn-cta:hover { background: var(--xmr-orange2); text-decoration: none; }
+
+    .mpn-tier { margin: 2rem 0 .75rem; }
+    .mpn-tier h2 {
+        font-family: var(--mono);
+        font-size: 1.02rem;
+        color: var(--xmr-orange2);
+        margin-bottom: .85rem;
+    }
+    .mpn-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: .85rem;
+    }
+    .mpn-sponsor {
+        display: block;
+        background: var(--surface, #161109);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: .95rem 1.05rem;
+        color: var(--text);
+        transition: border-color .15s ease, transform .15s ease;
+    }
+    .mpn-sponsor:hover {
+        border-color: rgba(242,104,34,.45);
+        transform: translateY(-1px);
+        text-decoration: none;
+    }
+    .mpn-sponsor .name {
+        font-family: var(--mono);
+        font-weight: 600;
+        color: var(--xmr-orange2);
+        display: block;
+        margin-bottom: .25rem;
+    }
+    .mpn-sponsor .desc {
+        font-size: .9rem;
+        line-height: 1.5;
+        color: var(--text-muted);
+    }
+    .mpn-empty {
+        background: var(--surface, #161109);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.1rem 1.25rem;
+        color: var(--text-muted);
+        margin-bottom: 2rem;
+    }
+</style>
+
+<div class="mpn-page">
+    <h1>Sponsors</h1>
+
+    <p class="mpn-intro">
+        These are <a href="https://monerica.com" rel="noopener">monerica.com</a>'s sponsors.
+        MoneroPriceNow is a project from Monerica, and the sponsors below support that work.
+        To become a sponsor, head over to monerica.com.
+    </p>
+
+    <a class="mpn-cta" href="https://monerica.com" rel="noopener">Become a sponsor at monerica.com →</a>
+
+    @if (Model.Groups.Count == 0)
+    {
+        <div class="mpn-empty">
+            @if (Model.FeedUnavailable)
+            {
+                <text>The sponsor list couldn't be loaded right now. Visit <a href="https://monerica.com" rel="noopener">monerica.com</a> to see current sponsors or to become one.</text>
+            }
+            else
+            {
+                <text>There are no active sponsors at the moment. Visit <a href="https://monerica.com" rel="noopener">monerica.com</a> to become the first.</text>
+            }
+        </div>
+    }
+    else
+    {
+        foreach (var group in Model.Groups)
+        {
+            <div class="mpn-tier">
+                <h2>@group.Label</h2>
+                <div class="mpn-grid">
+                    @foreach (var s in group.Sponsors)
+                    {
+                        if (!string.IsNullOrWhiteSpace(s.Link))
+                        {
+                            <a class="mpn-sponsor" href="@s.Link" rel="noopener nofollow" target="_blank">
+                                <span class="name">@s.Name</span>
+                                @if (!string.IsNullOrWhiteSpace(s.Description))
+                                {
+                                    <span class="desc">@s.Description</span>
+                                }
+                            </a>
+                        }
+                        else
+                        {
+                            <div class="mpn-sponsor">
+                                <span class="name">@s.Name</span>
+                                @if (!string.IsNullOrWhiteSpace(s.Description))
+                                {
+                                    <span class="desc">@s.Description</span>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
