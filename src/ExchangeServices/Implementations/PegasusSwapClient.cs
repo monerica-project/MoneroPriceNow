@@ -10,6 +10,15 @@ using System.Text.Json.Serialization;
 
 namespace ExchangeServices.Implmentations.PegasusSwap;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DIAGNOSTIC BUILD.
+// Network selection is NOT the cause: logs show get-all-coins=400 and
+// exchange-coin=422 on every chain. 422 = request parsed but semantically
+// rejected. This build logs the exact URL, the signed payload, and the full
+// response body for every non-2xx so we can see WHY Pegasus rejects it.
+// Run one warm cycle, then grep the console for "[PEGASUS]".
+// ─────────────────────────────────────────────────────────────────────────────
+
 public sealed class PegasusSwapClient : IPegasusSwapClient
 {
     private readonly HttpClient http;
@@ -36,6 +45,15 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
         this.http.Timeout = Timeout.InfiniteTimeSpan;
     }
 
+    private static void Log(string msg) => Console.WriteLine($"[PEGASUS] {msg}");
+
+    private static string Trunc(string? s, int max = 1500)
+    {
+        if (string.IsNullOrEmpty(s)) return "<empty>";
+        s = s.Replace("\r", " ").Replace("\n", " ");
+        return s.Length <= max ? s : s.Substring(0, max) + "…(truncated)";
+    }
+
     // -------------------------
     // Currencies
     // -------------------------
@@ -54,18 +72,18 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
     public async Task<PriceResult?> GetSellPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(opt.PublicKey) || string.IsNullOrWhiteSpace(opt.Secret))
+        {
+            Log("missing PublicKey/Secret — check appsettings");
             return null;
+        }
 
-        var coinFrom = ResolveCoin(query.Base);
-        var coinTo = ResolveCoin(query.Quote);
+        var coinFrom = ResolveCoin(query.Base);   // XMR
+        var coinTo = ResolveCoin(query.Quote);     // USDT
         if (string.IsNullOrWhiteSpace(coinFrom) || string.IsNullOrWhiteSpace(coinTo)) return null;
 
-        var networkFrom = NormalizeNetworkToPegasus(query.Base.Network);
-        var networkTo = NormalizeNetworkToPegasus(query.Quote.Network);
+        var networkFrom = PegasusNetwork(query.Base);    // XMR -> 'XMR'
+        var networkTo = PegasusNetwork(query.Quote);     // USDT -> 'ETH'
 
-        // ← Use exactly 1 XMR — matches what the website quotes for sell.
-        // Larger probes (5 XMR) get a better rate than 1 XMR on this exchange,
-        // which overstates the sell price.
         const decimal probeAmount = 1m;
 
         var dto = await CallExchangeCoinAsync(
@@ -83,7 +101,6 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
         var quoteReceived = (decimal)dto.Receive;
         if (quoteReceived <= 0) return null;
 
-        // With probe=1, dto.Receive is already USDT per 1 XMR directly
         var unitRate = quoteReceived / probeAmount;
         if (unitRate <= 0) return null;
 
@@ -104,15 +121,12 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
         if (string.IsNullOrWhiteSpace(opt.PublicKey) || string.IsNullOrWhiteSpace(opt.Secret))
             return null;
 
-        // BUY: probe with 500 USDT using lastSource=deposit → get XMR back
-        // Rate = 500 / dto.Receive = USDT per 1 XMR
-        // (lastSource=receive gives a distorted/worse rate for this exchange)
         var coinFrom = ResolveCoin(query.Quote); // paying QUOTE (USDT)
         var coinTo = ResolveCoin(query.Base);  // receiving BASE (XMR)
         if (string.IsNullOrWhiteSpace(coinFrom) || string.IsNullOrWhiteSpace(coinTo)) return null;
 
-        var networkFrom = NormalizeNetworkToPegasus(query.Quote.Network);
-        var networkTo = NormalizeNetworkToPegasus(query.Base.Network);
+        var networkFrom = PegasusNetwork(query.Quote);   // USDT -> 'ETH'
+        var networkTo = PegasusNetwork(query.Base);      // XMR -> 'XMR'
 
         const decimal probeUsdt = 500m;
 
@@ -122,7 +136,7 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
             coinTo: coinTo,       // XMR
             networkFrom: networkFrom,
             networkTo: networkTo,
-            lastSource: "deposit",    // "I am depositing 500 USDT"
+            lastSource: "deposit",
             ct: ct
         );
 
@@ -131,7 +145,6 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
         var xmrReceived = (decimal)dto.Receive;
         if (xmrReceived <= 0) return null;
 
-        // USDT per 1 XMR = 500 / xmrReceived
         var usdtPerXmr = probeUsdt / xmrReceived;
         if (usdtPerXmr <= 0) return null;
 
@@ -164,7 +177,7 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
             $"coinFrom={Uri.EscapeDataString(coinFrom)}",
             $"coinTo={Uri.EscapeDataString(coinTo)}",
             $"lastSource={Uri.EscapeDataString(lastSource)}",
-            $"typeSwap={TypeSwapFloat}"   // ← 2 = float, 1 = fixed
+            $"typeSwap={TypeSwapFloat}"   // <- 2 = float, 1 = fixed
         };
 
         if (!string.IsNullOrWhiteSpace(networkFrom))
@@ -172,13 +185,19 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
         if (!string.IsNullOrWhiteSpace(networkTo))
             qs.Add($"networkTo={Uri.EscapeDataString(networkTo)}");
 
-        var url = "/api/private/exchange-coin?" + string.Join("&", qs);
+        var query = string.Join("&", qs);
+        var url = "/api/private/exchange-coin?" + query;
+        const string payload = "exchange-coin";
+
+        // DIAGNOSTIC: show exactly what we send (the framework log masks this as ?*)
+        Log($"REQ  exchange-coin url={url}");
+        Log($"AUTH x-api-payload='{payload}'  x-api-signature={ComputeSignatureHex(payload, opt.Secret)}");
 
         var (status, raw) = await SendForStringWithRetryAsync(
             requestFactory: () =>
             {
                 var req = new HttpRequestMessage(HttpMethod.Get, url);
-                AddPegasusAuthHeaders(req, payload: "exchange-coin");
+                AddPegasusAuthHeaders(req, payload: payload);
                 return req;
             },
             timeout: GetRequestTimeout(),
@@ -186,8 +205,19 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
             ct: ct
         );
 
-        if (status is null || string.IsNullOrWhiteSpace(raw)) return null;
-        if ((int)status < 200 || (int)status >= 300) return null;
+        if (status is null)
+        {
+            Log($"RESP exchange-coin NO-RESPONSE (timeout/transport) url={url}");
+            return null;
+        }
+
+        if ((int)status < 200 || (int)status >= 300)
+        {
+            Log($"RESP exchange-coin {(int)status} body={Trunc(raw)}");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(raw)) return null;
 
         try
         {
@@ -196,8 +226,9 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
             if (dto.Receive <= 0 && dto.Amount <= 0) return null;
             return dto;
         }
-        catch
+        catch (Exception ex)
         {
+            Log($"PARSE exchange-coin failed: {ex.Message} body={Trunc(raw)}");
             return null;
         }
     }
@@ -208,20 +239,38 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
 
     private async Task<List<ExchangeCurrency>> GetAllCoinsAsync(int method, CancellationToken ct)
     {
-        const int limit = 500;
+        const int limit = 100;   // Pegasus rejects limit>100 with HTTP 400; pagination below covers the rest
         var results = new List<ExchangeCurrency>();
 
         var first = await GetAllCoinsPageAsync(page: 1, limit: limit, method: method, ct);
         results.AddRange(ExtractCurrencies(first, method));
+
+        // The board only ever prices XMR<->USDT, and both land on page 1. Stop as
+        // soon as we have them: a full 26-page sweep (×2 methods) exceeds the 8s
+        // price-fetch budget, gets cancelled, never caches, and starves pricing.
+        if (HasPricingAssets(results)) return results;
 
         var pageCount = first?.Pagination?.PageCount ?? 1;
         for (var page = 2; page <= pageCount; page++)
         {
             var next = await GetAllCoinsPageAsync(page, limit, method, ct);
             results.AddRange(ExtractCurrencies(next, method));
+            if (HasPricingAssets(results)) break;
         }
 
         return results;
+    }
+
+    private static bool HasPricingAssets(IEnumerable<ExchangeCurrency> coins)
+    {
+        bool hasXmr = false, hasUsdt = false;
+        foreach (var c in coins)
+        {
+            if (c.Ticker.Equals("XMR", StringComparison.OrdinalIgnoreCase)) hasXmr = true;
+            else if (c.Ticker.Equals("USDT", StringComparison.OrdinalIgnoreCase)) hasUsdt = true;
+            if (hasXmr && hasUsdt) return true;
+        }
+        return false;
     }
 
     private async Task<GetAllCoinsResponse?> GetAllCoinsPageAsync(int page, int limit, int method, CancellationToken ct)
@@ -230,24 +279,74 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
             return null;
 
         var url = $"/api/private/get-all-coins?page={page}&limit={limit}&method={method}";
+        const string payload = "get-all-coins";
 
+        // Detach from the caller's token: this runs inside the 8s per-exchange price
+        // budget, but the catalog is cached for minutes and must finish to be cached.
+        // The per-request timeout in SendForStringWithRetryAsync still bounds each page.
         var (status, raw) = await SendForStringWithRetryAsync(
             requestFactory: () =>
             {
                 var req = new HttpRequestMessage(HttpMethod.Get, url);
-                AddPegasusAuthHeaders(req, payload: "get-all-coins");
+                AddPegasusAuthHeaders(req, payload: payload);
                 return req;
             },
             timeout: GetRequestTimeout(),
             retryCount: GetRetryCount(),
-            ct: ct
+            ct: CancellationToken.None
         );
 
-        if (status is null || string.IsNullOrWhiteSpace(raw) || (int)status < 200 || (int)status >= 300)
+        if (status is null)
+        {
+            Log($"RESP get-all-coins NO-RESPONSE (timeout/transport) url={url}");
             return null;
+        }
 
-        try { return JsonSerializer.Deserialize<GetAllCoinsResponse>(raw, JsonOpts); }
-        catch { return null; }
+        if ((int)status < 200 || (int)status >= 300)
+        {
+            Log($"RESP get-all-coins {(int)status} body={Trunc(raw)}");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        try
+        {
+            var dto = JsonSerializer.Deserialize<GetAllCoinsResponse>(raw, JsonOpts);
+            LogCoinDefs(dto, method);
+            return dto;
+        }
+        catch (Exception ex)
+        {
+            Log($"PARSE get-all-coins failed: {ex.Message} body={Trunc(raw)}");
+            return null;
+        }
+    }
+
+    // DIAGNOSTIC: print the exact coin id + raw network codes Pegasus uses for
+    // XMR and USDT. The exchange-coin 422 ("Such exchange pair is not available")
+    // means our coinFrom/coinTo/network strings don't match Pegasus's catalog —
+    // these lines tell us the correct values to send.
+    private static void LogCoinDefs(GetAllCoinsResponse? dto, int method)
+    {
+        if (dto is null) return;
+        var coins = method == 1 ? dto.DepositCoins : dto.WithdrawCoins;
+        if (coins is null) return;
+
+        foreach (var c in coins)
+        {
+            var sub = (c.SubName ?? "").Trim();
+            if (!sub.Equals("XMR", StringComparison.OrdinalIgnoreCase) &&
+                !sub.Equals("USDT", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var nets = method == 1 ? c.Networks?.Deposits : c.Networks?.Withdraws;
+            var netList = nets is null || nets.Count == 0
+                ? "<none>"
+                : string.Join(",", nets.Select(n => $"'{(n.SubName ?? "").Trim()}'"));
+
+            Log($"COIN method={method} subName='{sub}' name='{(c.Name ?? "").Trim()}' networks=[{netList}]");
+        }
     }
 
     private static IEnumerable<ExchangeCurrency> ExtractCurrencies(GetAllCoinsResponse? dto, int method)
@@ -321,6 +420,19 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
         return (asset.Ticker ?? "").Trim().ToLowerInvariant();
     }
 
+    // Pegasus network code for an asset's leg, per the live get-all-coins catalog:
+    //   XMR  -> network 'XMR'  (required on the XMR side; omitting it 422s)
+    //   USDT -> network 'ETH'  (catalog has NO Tron/ERC20; ETH is the canonical leg)
+    // The board feeds USDT(Tron), which Pegasus doesn't offer at all, so we pin
+    // the USDT leg to ETH. USDT is ~$1 on every chain, so it's a valid USDT/XMR rate.
+    private static string? PegasusNetwork(AssetRef asset)
+    {
+        var ticker = (asset.Ticker ?? "").Trim().ToUpperInvariant();
+        if (ticker == "USDT") return "ETH";
+        if (ticker == "XMR") return "XMR";
+        return NormalizeNetworkToPegasus(asset.Network);
+    }
+
     private static string? NormalizeNetworkToPegasus(string? network)
     {
         if (string.IsNullOrWhiteSpace(network)) return null;
@@ -330,9 +442,9 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
             "Tron" => "TRX",
             "TRX" => "TRX",
             "TRC20" => "TRX",
-            "Ethereum" => "ERC20",
-            "ETH" => "ERC20",
-            "ERC20" => "ERC20",
+            "Ethereum" => "ETH",
+            "ETH" => "ETH",
+            "ERC20" => "ETH",
             "Binance Smart Chain" => "BSC",
             "BSC" => "BSC",
             "BEP20" => "BSC",
@@ -342,8 +454,10 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
             "BTC" => "BTC",
             "Polygon" => "MATIC",
             "MATIC" => "MATIC",
-            "Arbitrum" => "ARB",
-            "ARB" => "ARB",
+            "Arbitrum" => "ARBITRUM",
+            "ARB" => "ARBITRUM",
+            "Monero" => "XMR",
+            "XMR" => "XMR",
             _ => network.Trim()
         };
     }
@@ -356,10 +470,12 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
         {
             "TRX" => "Tron",
             "ERC20" => "Ethereum",
+            "ETH" => "Ethereum",
             "BSC" => "Binance Smart Chain",
             "SOL" => "Solana",
             "BTC" => "Bitcoin",
             "MATIC" => "Polygon",
+            "ARBITRUM" => "Arbitrum",
             "ARB" => "Arbitrum",
             _ => networkCode.Trim()
         };
@@ -375,7 +491,8 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
         return TimeSpan.FromSeconds(Math.Clamp(seconds, 2, 60));
     }
 
-    private int GetRetryCount() => 1;
+    // Diagnostic: no retry — one clean attempt per call so the logs stay readable.
+    private int GetRetryCount() => 0;
 
     // -------------------------
     // HTTP sender
