@@ -4,7 +4,7 @@
     ViewData["Title"] = "MoneroPriceNow.com — Live XMR / USDT Prices";
 }
 
- 
+<link rel="stylesheet" href="~/css/pricechart.css" asp-append-version="true" />
 
 <div class="price-hero">
 
@@ -106,7 +106,33 @@
     </table>
 </div>
 
- 
+<!-- Price history chart (hidden until /api/history confirms data is available) -->
+<div class="chart-section" id="chartSection" hidden>
+    <div class="chart-head">
+        <div class="chart-title-wrap">
+            <span class="chart-title">Price History</span>
+            <span class="chart-trend" id="chartTrend"></span>
+        </div>
+        <div class="chart-ranges" id="chartRanges" role="group" aria-label="Chart time range">
+            <button type="button" class="chart-range-btn chart-range-active" data-range="1h">1h</button>
+            <button type="button" class="chart-range-btn" data-range="4h" hidden>4h</button>
+            <button type="button" class="chart-range-btn" data-range="12h" hidden>12h</button>
+            <button type="button" class="chart-range-btn" data-range="1d" hidden>1d</button>
+            <button type="button" class="chart-range-btn" data-range="3d" hidden>3d</button>
+            <button type="button" class="chart-range-btn" data-range="7d" hidden>7d</button>
+            <button type="button" class="chart-range-btn" data-range="30d" hidden>30d</button>
+        </div>
+    </div>
+    <div class="chart-wrap">
+        <canvas id="priceChart" aria-label="XMR/USDT buy, sell, and market price history chart" role="img"></canvas>
+        <div class="chart-empty" id="chartEmpty" hidden>Collecting price history… check back in a few minutes.</div>
+    </div>
+    <div class="chart-note">
+        Averages across all listed exchanges · <span class="chart-key chart-key-buy">Buy</span> ·
+        <span class="chart-key chart-key-sell">Sell</span> ·
+        <span class="chart-key chart-key-market">Market</span> · auto-refreshing
+    </div>
+</div>
 
 <!-- Privacy legend -->
 <div class="privacy-legend">
@@ -151,3 +177,5 @@
 
 <script>window.__INITIAL_PRICES__ = @Html.Raw(Model.InitialPricesJson);</script>
 <script src="~/js/moneropricenow.js" asp-append-version="true"></script>
+<script src="~/lib/chartjs/chart.umd.min.js" asp-append-version="true"></script>
+<script src="~/js/pricechart.js" asp-append-version="true"></script>

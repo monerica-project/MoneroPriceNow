@@ -1,0 +1,110 @@
+/* pricechart.css — Price History section (below the exchange table).
+   Pulls the same CSS variables as moneropricenow.css so it inherits the
+   dark XMR theme automatically. */
+
+.chart-section {
+    max-width: 900px;            /* match .table-wrap */
+    margin: 1.1rem auto;
+    background: var(--surface2, #1a1108);
+    border: 1px solid var(--border, rgba(242,104,34,.16));
+    border-radius: 10px;
+    padding: .9rem 1rem 1rem;
+}
+
+.chart-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem .9rem;
+    margin-bottom: .6rem;
+}
+
+.chart-title-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: .7rem;
+}
+
+.chart-title {
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: .8rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text, #ddd4c4);
+}
+
+.chart-trend {
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: .72rem;
+    letter-spacing: .02em;
+}
+
+.chart-trend.trend-up   { color: var(--good, #3ecf8e); }
+.chart-trend.trend-down { color: var(--bad, #ff5b5b); }
+
+.chart-ranges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+}
+
+.chart-range-btn {
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: .68rem;
+    padding: .22rem .55rem;
+    background: transparent;
+    color: var(--text-muted, #7a6a5a);
+    border: 1px solid var(--border, rgba(242,104,34,.16));
+    border-radius: 5px;
+    cursor: pointer;
+    transition: color .12s, border-color .12s, background .12s;
+}
+
+.chart-range-btn:hover {
+    color: var(--text, #ddd4c4);
+    border-color: var(--border-hi, rgba(242,104,34,.38));
+}
+
+.chart-range-btn.chart-range-active {
+    color: var(--xmr-dark, #0d0a07);
+    background: var(--xmr-orange, #F26822);
+    border-color: var(--xmr-orange, #F26822);
+    font-weight: 700;
+}
+
+.chart-wrap {
+    position: relative;
+    height: 280px;
+}
+
+@media (max-width: 640px) {
+    .chart-wrap { height: 220px; }
+}
+
+.chart-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: .75rem;
+    color: var(--text-muted, #7a6a5a);
+}
+
+.chart-empty[hidden] { display: none; }
+
+.chart-note {
+    margin-top: .55rem;
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: .62rem;
+    color: var(--text-muted, #7a6a5a);
+    opacity: .8;
+}
+
+.chart-key { font-weight: 700; }
+.chart-key-buy    { color: var(--good, #3ecf8e); }
+.chart-key-sell   { color: var(--xmr-orange2, #ff8c3a); }
+.chart-key-market { color: var(--text, #ddd4c4); }

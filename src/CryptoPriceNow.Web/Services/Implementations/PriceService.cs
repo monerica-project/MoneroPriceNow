@@ -1,3 +1,5 @@
+using CryptoPriceNow.Data.Interfaces;
+using CryptoPriceNow.Data.Models;
 using CryptoPriceNow.Web.Models;
 using ExchangeServices.Abstractions;
 using ExchangeServices.Interfaces;
@@ -13,6 +15,10 @@ public sealed class PriceService : IPriceService
     private readonly IReadOnlyList<IExchangeCurrencyApi> currencyApis;
     private readonly IMemoryCache cache;
     private readonly PriceServiceOptions opt;
+    private readonly IPriceQuoteSink quoteSink;
+
+    // exchangeKey -> "float"|"fixed" — resolved once at startup from IRateType
+    private readonly IReadOnlyDictionary<string, string> rateTypes;
 
     // ── Thundering-herd guard: one semaphore per per-exchange cache key ───────
     private readonly ConcurrentDictionary<string, SemaphoreSlim> keyLocks = new();
@@ -28,12 +34,19 @@ public sealed class PriceService : IPriceService
         IEnumerable<IExchangePriceApi> priceApis,
         IEnumerable<IExchangeCurrencyApi> currencyApis,
         IMemoryCache cache,
-        IOptions<PriceServiceOptions> options)
+        IOptions<PriceServiceOptions> options,
+        IPriceQuoteSink quoteSink)
     {
         this.priceApis = priceApis.ToList();
         this.currencyApis = currencyApis.ToList();
         this.cache = cache;
         this.opt = options.Value;
+        this.quoteSink = quoteSink;
+
+        this.rateTypes = this.priceApis.ToDictionary(
+            a => a.ExchangeKey,
+            a => (a as IRateType)?.RateType ?? RateTypes.Float,
+            StringComparer.OrdinalIgnoreCase);
     }
 
     // ── Public helpers ────────────────────────────────────────────────────────
@@ -60,6 +73,18 @@ public sealed class PriceService : IPriceService
 
         var rows = await FetchLiveAsync(baseRef, quoteRef, ct);
         latestRows[PairKey(baseRef, quoteRef)] = rows;
+
+        // Hand the snapshot to the quote logger. EnqueueAsync only writes to an
+        // in-memory channel (or is a no-op when no DB is configured), so this
+        // never slows the warm cycle or page loads.
+        try
+        {
+            await quoteSink.EnqueueAsync(BuildSnapshot(baseRef, quoteRef, rows), ct);
+        }
+        catch
+        {
+            // Logging must never break price serving.
+        }
     }
 
     // ── Keep ForceRefreshAllAsync for backward compat (warmer will switch) ────
@@ -172,6 +197,34 @@ public sealed class PriceService : IPriceService
         return await GetOrCreateLockedAsync<IReadOnlyList<ExchangeCurrency>>(key, ttl, ct,
                    () => currencyApi.GetCurrenciesAsync(ct))
                ?? Array.Empty<ExchangeCurrency>();
+    }
+
+    // ── Quote snapshot assembly (for the Postgres logger) ─────────────────────
+
+    private QuoteSnapshot BuildSnapshot(
+        AssetRef baseRef, AssetRef quoteRef, IReadOnlyList<TwoWayPriceRow> rows)
+    {
+        var pair = BuildPairLabel(baseRef, quoteRef);
+        var dtoRows = rows.Select(r => new QuoteRowDto(
+            ExchangeKey: r.Exchange,
+            SiteName: r.SiteName,
+            SiteUrl: r.SiteUrl,
+            PrivacyLevel: r.PrivacyLevel,
+            RateType: rateTypes.TryGetValue(r.Exchange, out var rt) ? rt : RateTypes.Float,
+            Buy: r.Buy,
+            Sell: r.Sell,
+            QuoteTsUtc: r.TsUtc
+        )).ToList();
+
+        return new QuoteSnapshot(pair, DateTimeOffset.UtcNow, dtoRows);
+    }
+
+    /// <summary>Normalized pair label stored in the DB, e.g. "XMR/USDT:Tron".</summary>
+    public static string BuildPairLabel(AssetRef baseRef, AssetRef quoteRef)
+    {
+        static string Part(AssetRef a) =>
+            string.IsNullOrWhiteSpace(a.Network) ? a.Ticker : $"{a.Ticker}:{a.Network}";
+        return $"{Part(baseRef)}/{Part(quoteRef)}";
     }
 
     // ── Per-exchange cache helpers ────────────────────────────────────────────

@@ -89,6 +89,7 @@ User=$SERVICE_USER
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://127.0.0.1:$APP_PORT
 Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+EnvironmentFile=-/etc/$APP_NAME/db.env
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

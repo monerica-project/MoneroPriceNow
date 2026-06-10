@@ -54,6 +54,12 @@ public sealed class StereoSwapClient : IStereoSwapClient
     // ── SELL: XMR → USDT ─────────────────────────────────────────────────────
     public async Task<PriceResult?> GetSellPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(opt.ApiKey))
+        {
+            Console.WriteLine("[STEREOSWAP] missing ApiKey — set StereoSwap:ApiKey in appsettings.json");
+            return null;
+        }
+
         var (receiveAmt, minAmt) = await CalculateAsync(
             fromCoin: opt.XmrCoin, fromNetwork: opt.XmrNetwork,
             toCoin: opt.UsdtCoin, toNetwork: opt.UsdtNetwork,
@@ -77,6 +83,12 @@ public sealed class StereoSwapClient : IStereoSwapClient
     // ── BUY: USDT → XMR ──────────────────────────────────────────────────────
     public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(opt.ApiKey))
+        {
+            Console.WriteLine("[STEREOSWAP] missing ApiKey — set StereoSwap:ApiKey in appsettings.json");
+            return null;
+        }
+
         var probe = opt.BuyProbeAmountUsdt;
 
         var (receiveAmt, minAmt) = await CalculateAsync(
@@ -160,12 +172,18 @@ public sealed class StereoSwapClient : IStereoSwapClient
     private async Task<string?> PostAsync(string fullUrl, string jsonPayload, CancellationToken ct)
     {
         var timeout = TimeSpan.FromSeconds(Math.Clamp(opt.RequestTimeoutSeconds, 2, 30));
-        Console.WriteLine($"[STEREOSWAP] POST {fullUrl}");
+
+        var headerName = string.IsNullOrWhiteSpace(opt.AuthHeaderName) ? "Authorization" : opt.AuthHeaderName.Trim();
+        var headerValue = string.IsNullOrWhiteSpace(opt.AuthScheme)
+            ? opt.ApiKey
+            : $"{opt.AuthScheme.Trim()} {opt.ApiKey}";
+
+        Console.WriteLine($"[STEREOSWAP] POST {fullUrl} (auth header '{headerName}', scheme '{opt.AuthScheme}', key len={opt.ApiKey?.Length ?? 0})");
 
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Post, fullUrl);
-            req.Headers.TryAddWithoutValidation("X-API-Key", opt.ApiKey);
+            req.Headers.TryAddWithoutValidation(headerName, headerValue);
             req.Headers.TryAddWithoutValidation("Accept", "application/json");
             req.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 

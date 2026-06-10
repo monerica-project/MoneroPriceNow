@@ -3,6 +3,16 @@ namespace ExchangeServices.Implementations;
 public sealed class StereoSwapOptions
 {
     public string ApiKey { get; set; } = string.Empty;
+
+    // Auth header construction. The header value is "{AuthScheme} {ApiKey}", or just
+    // "{ApiKey}" when AuthScheme is blank. Set these to match StereoSwap's Swagger
+    // "Authorize" dialog without recompiling. Common cases:
+    //   Authorization + "Bearer"  → Authorization: Bearer <key>
+    //   Authorization + ""        → Authorization: <key>      (raw key, no prefix)
+    //   X-API-Key     + ""        → X-API-Key: <key>
+    public string AuthHeaderName { get; set; } = "Authorization";
+    public string AuthScheme { get; set; } = "Bearer";
+
     public string BaseUrl { get; set; } = "https://api.stereoswap.app";
     public string SiteName { get; set; } = "StereoSwap";
     public string? SiteUrl { get; set; } = "https://stereoswap.app";

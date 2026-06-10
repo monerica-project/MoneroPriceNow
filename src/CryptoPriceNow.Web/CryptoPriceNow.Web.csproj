@@ -13,6 +13,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ExchangeServices\ExchangeServices.csproj" />
+    <ProjectReference Include="..\CryptoPriceNow.Data\CryptoPriceNow.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Required for `dotnet ef migrations add` with this as the startup project -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.*">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

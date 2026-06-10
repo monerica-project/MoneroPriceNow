@@ -1,6 +1,9 @@
+using CryptoPriceNow.Data;
+using CryptoPriceNow.Data.Services;
 using CryptoPriceNow.Services;
 using CryptoPriceNow.Web.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +14,10 @@ builder.Services.AddHttpClient();
 // Registers exchange clients + options binding
 builder.Services.AddCryptoPriceNowServices(builder.Configuration);
 
+// Postgres quote store. No-ops (NullPriceQuoteSink) when ConnectionStrings:PriceDb
+// is absent, so the site runs unchanged without a database.
+builder.Services.AddCryptoPriceNowData(builder.Configuration);
+
 // Override IPriceService to singleton so the cache is shared across ALL requests.
 builder.Services.AddSingleton<IPriceService, PriceService>();
 
@@ -18,6 +25,31 @@ builder.Services.AddSingleton<IPriceService, PriceService>();
 builder.Services.AddHostedService<PriceWarmingService>();
 
 var app = builder.Build();
+
+// ── Database migration on startup ────────────────────────────────────────────
+// Applies any pending EF migrations before the site starts serving. New deploys
+// with new migrations self-upgrade the schema. Disable with
+// Database:MigrateOnStartup=false if you ever want to run migrations manually.
+var priceDbConfigured = !string.IsNullOrWhiteSpace(
+    builder.Configuration.GetConnectionString("PriceDb"));
+
+if (priceDbConfigured && builder.Configuration.GetValue("Database:MigrateOnStartup", true))
+{
+    using var scope = app.Services.CreateScope();
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PriceDbContext>>();
+    await using var db = await factory.CreateDbContextAsync();
+    try
+    {
+        await db.Database.MigrateAsync();
+        app.Logger.LogInformation("[PriceDb] Migrations applied / schema up to date");
+    }
+    catch (Exception ex)
+    {
+        // Don't kill the site if Postgres is down — quotes just won't log and
+        // the chart will show as unavailable until the DB comes back.
+        app.Logger.LogError(ex, "[PriceDb] Migration failed — price logging disabled until DB is reachable");
+    }
+}
 
 var torUrl = builder.Configuration.GetValue<string>("TorUrl") ?? string.Empty;
 
@@ -88,6 +120,68 @@ app.MapGet("/api/prices/two-way", async (
 {
     var rows = await prices.GetTwoWayPricesAsync(@base, quote, ct);
     return Results.Ok(rows);
+});
+
+// ── Price history (/api/history) ─────────────────────────────────────────────
+// Bucketed buy/sell/market averages for the chart. range = one of the presets
+// in PriceHistoryService.Presets (30m, 1h, 3h, 6h, 12h, 24h, 3d, 7d).
+// Returns { enabled:false } when no database is configured so the front-end
+// hides the chart section cleanly.
+app.MapGet("/api/history", async (
+    HttpContext http,
+    string? pair,
+    string? range,
+    CancellationToken ct) =>
+{
+    var history = http.RequestServices.GetService<PriceHistoryService>();
+    if (history is null)
+        return Results.Ok(new { enabled = false, points = Array.Empty<object>() });
+
+    // Only allow pairs the warmer actually tracks — prevents arbitrary-string
+    // queries against the table.
+    var requestedPair = string.IsNullOrWhiteSpace(pair) ? "XMR/USDT:Tron" : pair.Trim();
+    if (!requestedPair.Equals("XMR/USDT:Tron", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "unknown pair" });
+
+    try
+    {
+        var result = await history.GetHistoryAsync("XMR/USDT:Tron", range, ct);
+
+        // Which range presets have enough history behind them to be worth showing?
+        // A range is available once data spans at least that far back. The shortest
+        // preset is always available so there's never an empty range bar.
+        var now = DateTimeOffset.UtcNow;
+        var span = result.OldestUtc.HasValue ? now - result.OldestUtc.Value : TimeSpan.Zero;
+        var presets = PriceHistoryService.Presets;
+        var available = presets
+            .Where((p, i) => i == 0 || span >= p.Range)
+            .Select(p => p.Key)
+            .ToArray();
+
+        return Results.Ok(new
+        {
+            enabled = true,
+            pair = result.Pair,
+            range = result.RangeKey,
+            bucketSeconds = result.BucketSeconds,
+            oldestMs = result.OldestUtc?.ToUnixTimeMilliseconds(),
+            availableRanges = available,
+            points = result.Points.Select(p => new
+            {
+                t = p.BucketUtc.ToUnixTimeMilliseconds(),
+                buy = p.AvgBuy,
+                sell = p.AvgSell,
+                market = p.Market,
+                n = p.Samples
+            })
+        });
+    }
+    catch (OperationCanceledException) { throw; }
+    catch
+    {
+        // DB temporarily unreachable — degrade gracefully, don't 500 the chart.
+        return Results.Ok(new { enabled = false, points = Array.Empty<object>() });
+    }
 });
 
 // ── Sponsor proxy (/api/sponsors) ────────────────────────────────────────────
