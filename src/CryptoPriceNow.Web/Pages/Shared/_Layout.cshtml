@@ -3,6 +3,8 @@
     var torUrl = Config["TorUrl"];
     var hasTor = !string.IsNullOrEmpty(torUrl);
     var isOnTor = Context.Request.Host.Host.EndsWith(".onion", StringComparison.OrdinalIgnoreCase);
+    var donationAddress = Config["DonationAddress"]?.Trim();
+    var hasDonation = !string.IsNullOrEmpty(donationAddress);
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -36,6 +38,11 @@
             <a href="~/sponsors">Sponsors</a> |
             <a href="https://github.com/monerica-project/MoneroPriceNow" target="_blank">Code</a> |
             <a href="~/contact">Contact</a>
+            <a href="~/contact">Contact</a>
+            @if (hasDonation)
+            {
+                <text> | <a href="monero:@donationAddress" title="@donationAddress">Donate</a></text>
+            }
             @if (hasTor && !isOnTor)
             {
                 <text> | <a href="@torUrl" rel="noopener noreferrer">Tor</a></text>
