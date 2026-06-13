@@ -4,14 +4,12 @@ public sealed class StereoSwapOptions
 {
     public string ApiKey { get; set; } = string.Empty;
 
-    // Auth header construction. The header value is "{AuthScheme} {ApiKey}", or just
-    // "{ApiKey}" when AuthScheme is blank. Set these to match StereoSwap's Swagger
-    // "Authorize" dialog without recompiling. Common cases:
-    //   Authorization + "Bearer"  → Authorization: Bearer <key>
-    //   Authorization + ""        → Authorization: <key>      (raw key, no prefix)
-    //   X-API-Key     + ""        → X-API-Key: <key>
-    public string AuthHeaderName { get; set; } = "Authorization";
-    public string AuthScheme { get; set; } = "Bearer";
+    // Auth header construction. Header value is "{AuthScheme} {ApiKey}", or just
+    // "{ApiKey}" when AuthScheme is blank. Confirmed via StereoSwap support + Swagger
+    // ApiKeyAuth: header name "X-API-Key", raw key value, NO scheme prefix.
+    //   X-API-Key: <key>
+    public string AuthHeaderName { get; set; } = "X-API-Key";
+    public string AuthScheme { get; set; } = "";
 
     public string BaseUrl { get; set; } = "https://api.stereoswap.app";
     public string SiteName { get; set; } = "StereoSwap";
@@ -21,13 +19,16 @@ public sealed class StereoSwapOptions
 
     // type_swap: 2 = floating rate, 1 = fixed rate
     public int TypeSwap { get; set; } = 2;
-    // mode: "standard" (check docs for other modes e.g. "fixed")
+    // mode: valid values are "standard", "oblivion", "lets_refresh" (per API validation).
     public string Mode { get; set; } = "standard";
 
     public string XmrCoin { get; set; } = "XMR";
     public string XmrNetwork { get; set; } = "XMR";
     public string UsdtCoin { get; set; } = "USDT";
-    public string UsdtNetwork { get; set; } = "TRX";
+    // NOTE: StereoSwap does NOT support XMR<->USDT on TRX (TRC20) — "Such exchange pair
+    // is not available". It DOES support XMR<->USDT on ETH/BSC/MATIC/ARBITRUM/APT/etc.
+    // USDT price is the same across networks, so ETH is used as the quote leg.
+    public string UsdtNetwork { get; set; } = "ETH";
     public decimal BuyProbeAmountUsdt { get; set; } = 100m;
     public decimal MinAmountUsd { get; set; }
 }

@@ -12,13 +12,17 @@ namespace ExchangeServices.Implementations;
 /// <summary>
 /// StereoSwap partner API client.
 ///
-/// Auth: Bearer token in Authorization header.
+/// Auth: raw API key in "X-API-Key" header (no scheme prefix).
+///       Configurable via StereoSwap:AuthHeaderName / StereoSwap:AuthScheme.
 ///
 /// POST /partner/v1/exchange/calculate/
-/// Body: { amount, last_source:"deposit", type_swap:1, mode:"standard",
+/// Body: { amount, last_source:"deposit", type_swap, mode:"standard",
 ///         from_coin, from_network, to_coin, to_network }
 /// Response: { receive_amount, min_amount, max_amount, rate }
 ///   receive_amount = units of to_coin received for `amount` of from_coin
+///
+/// Network note: XMR<->USDT is NOT available on TRX. Use a supported USDT
+/// network (ETH/BSC/MATIC/ARBITRUM/APT/...). USDT price is network-agnostic.
 ///
 /// SELL (XMR→USDT): from=XMR, to=USDT, amount=1
 ///   → receive_amount = USDT per 1 XMR (direct)
@@ -173,12 +177,10 @@ public sealed class StereoSwapClient : IStereoSwapClient
     {
         var timeout = TimeSpan.FromSeconds(Math.Clamp(opt.RequestTimeoutSeconds, 2, 30));
 
-        var headerName = string.IsNullOrWhiteSpace(opt.AuthHeaderName) ? "Authorization" : opt.AuthHeaderName.Trim();
+        var headerName = string.IsNullOrWhiteSpace(opt.AuthHeaderName) ? "X-API-Key" : opt.AuthHeaderName.Trim();
         var headerValue = string.IsNullOrWhiteSpace(opt.AuthScheme)
             ? opt.ApiKey
             : $"{opt.AuthScheme.Trim()} {opt.ApiKey}";
-
-        Console.WriteLine($"[STEREOSWAP] POST {fullUrl} (auth header '{headerName}', scheme '{opt.AuthScheme}', key len={opt.ApiKey?.Length ?? 0})");
 
         try
         {
@@ -192,16 +194,19 @@ public sealed class StereoSwapClient : IStereoSwapClient
 
             if (await Task.WhenAny(sendTask, timeoutTask) == timeoutTask)
             {
-                Console.WriteLine($"[STEREOSWAP] Timed out");
+                Console.WriteLine("[STEREOSWAP] Timed out");
                 return null;
             }
 
             using var resp = await sendTask;
             var body = await resp.Content.ReadAsStringAsync(CancellationToken.None);
 
-            Console.WriteLine($"[STEREOSWAP] HTTP {(int)resp.StatusCode}: {body[..Math.Min(300, body.Length)]}");
+            if (!resp.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"[STEREOSWAP] HTTP {(int)resp.StatusCode}: {body[..Math.Min(300, body.Length)]}");
+                return null;
+            }
 
-            if (!resp.IsSuccessStatusCode) return null;
             return body;
         }
         catch (Exception ex)
