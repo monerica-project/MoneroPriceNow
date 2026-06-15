@@ -1490,3 +1490,34 @@ tbody tr.is-sponsor {
     .sb-sponsor { animation: none; }
     .sponsor-bar-track { transition: none; }
 }
+
+.xmr-mmc-cta {
+    max-width: 1100px;            /* match your other content blocks / chart width */
+    margin: 1.5rem auto;
+    padding: 0.85rem 1.25rem;
+    background: rgba(255, 102, 0, 0.06);
+    border: 1px solid rgba(255, 102, 0, 0.22);
+    border-radius: 10px;
+    text-align: center;
+    font-family: inherit;          /* inherit the monospace stack */
+}
+
+.xmr-mmc-cta p {
+    margin: 0;
+    color: #b9b9b9;                /* muted body text, like your other copy */
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.xmr-mmc-cta a {
+    color: #ff6600;                /* Monero orange, matches your headings */
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.15s ease;
+}
+
+.xmr-mmc-cta a:hover,
+.xmr-mmc-cta a:focus-visible {
+    color: #ff9347;
+    text-decoration: underline;
+}
