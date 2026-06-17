@@ -43,7 +43,6 @@ public static class ServiceCollectionExtensions
         services.AddSwapgate(config);
         services.AddOctoSwap(config);
         services.AddStereoSwap(config);
-        services.AddSwapter(config);
         services.AddBitXChange(config);
         services.AddCypherGoat(config);
         services.AddTrocador(config);
