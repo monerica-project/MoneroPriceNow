@@ -1,4 +1,5 @@
 using CryptoPriceNow.Services;
+using CryptoPriceNow.Web.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -10,10 +11,10 @@ public sealed class PriceWarmingService : BackgroundService
     private readonly ILogger<PriceWarmingService> _log;
     private readonly TimeSpan _interval;
 
+    // Pairs to keep warm come straight from the catalog, so adding a pair in
+    // PairCatalog.All automatically warms it (and logs its history) here too.
     private static readonly (string Base, string Quote)[] Pairs =
-    [
-        ("XMR", "USDTTRC"),
-    ];
+        PairCatalog.All.Select(p => (p.Base, p.ApiQuote)).ToArray();
 
     public PriceWarmingService(
         IPriceService prices,
@@ -28,7 +29,8 @@ public sealed class PriceWarmingService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        _log.LogInformation("[PriceWarming] Starting — interval={Interval}s", _interval.TotalSeconds);
+        _log.LogInformation("[PriceWarming] Starting — interval={Interval}s, pairs={Count}",
+            _interval.TotalSeconds, Pairs.Length);
 
         // First warm on startup — populates latestRows before any request arrives
         await WarmAllAsync(ct);

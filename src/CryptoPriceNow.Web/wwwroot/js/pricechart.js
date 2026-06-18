@@ -13,7 +13,15 @@
     if (!section || !canvas || typeof Chart === 'undefined') return;
 
     const REFRESH_MS = 30_000;          // real-time refresh
-    const PAIR = 'XMR/USDT:Tron';
+
+    // Per-page pair config (injected by _PriceBoard.cshtml). Falls back to USDT.
+    const PINFO = Object.assign({
+        historyPair: 'XMR/USDT:Tron',
+        symbol: '$',
+        suffix: '',
+        decimals: 2
+    }, window.__PAIR__ || {});
+    const PAIR = PINFO.historyPair;
 
     let currentRange = '1h';
     let chart = null;
@@ -44,7 +52,10 @@
 
     function fmtPrice(v) {
         if (v == null) return '—';
-        return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return Number(v).toLocaleString(undefined, {
+            minimumFractionDigits: PINFO.decimals,
+            maximumFractionDigits: PINFO.decimals
+        });
     }
 
     // ── Trend readout (direction over the visible range) ─────────────────────
@@ -157,7 +168,7 @@
                         titleFont: { family: FONT_MONO, size: 11 },
                         bodyFont: { family: FONT_MONO, size: 11 },
                         callbacks: {
-                            label: ctx => ` ${ctx.dataset.label}: $${fmtPrice(ctx.parsed.y)}`
+                            label: ctx => ` ${ctx.dataset.label}: ${PINFO.symbol}${fmtPrice(ctx.parsed.y)}${PINFO.suffix}`
                         }
                     }
                 },
@@ -176,7 +187,7 @@
                         ticks: {
                             color: COLOR_MUTED,
                             font: { family: FONT_MONO, size: 9 },
-                            callback: v => '$' + fmtPrice(v)
+                            callback: v => PINFO.symbol + fmtPrice(v) + PINFO.suffix
                         },
                         grid: { color: COLOR_GRID, drawTicks: false }
                     }

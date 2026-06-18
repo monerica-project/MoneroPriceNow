@@ -18,6 +18,24 @@
     const CIRCUMF = 37.7;
     const EPS = 1e-9;
 
+    // -- Per-page trading pair (injected by _PriceBoard.cshtml) --------------
+    // Falls back to XMR/USDT so the script still works if the config is absent.
+    const PAIR = Object.assign({
+        base: 'XMR',
+        apiQuote: 'USDTTRC',
+        historyPair: 'XMR/USDT:Tron',
+        quoteLabel: 'USDT',
+        symbol: '$',
+        suffix: '',
+        decimals: 2,
+        minValidPrice: 1,
+        isUsd: true
+    }, window.__PAIR__ || {});
+
+    // Smallest value treated as a real price for this pair. USD pairs use 1
+    // (XMR is never < $1); crypto pairs use a tiny floor so sub-1 ratios survive.
+    const MINP = Number(PAIR.minValidPrice) || 0;
+
     const prev = new Map();
     const flashTimers = new WeakMap();
     let heroFirstRender = true;
@@ -347,7 +365,11 @@
             .replaceAll("'", '&#39;');
     }
     function num(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
-    function fmt(n) { const x = Number(n); return Number.isFinite(x) ? '$' + x.toFixed(2) : '--'; }
+    function fmt(n) {
+        const x = Number(n);
+        if (!Number.isFinite(x)) return '--';
+        return PAIR.symbol + x.toFixed(PAIR.decimals) + PAIR.suffix;
+    }
     function eq(a, b) { return a !== null && b !== null && Math.abs(a - b) < EPS; }
 
     function fmtMinAmt(v) {
@@ -361,7 +383,7 @@
     }
 
     function updateTitle(mid) {
-        const m = (mid !== null && mid >= 1) ? '$' + mid.toFixed(2) : '--';
+        const m = (mid !== null && mid >= MINP) ? fmt(mid) : '--';
         document.title = m + ' \u00b7 MoneroPriceNow.com';
     }
 
@@ -414,13 +436,13 @@
 
     function computeStats(rawData) {
         const rows = rawData.map(mapRow);
-        const withBuy = rows.filter(r => r.buy !== null && r.buy >= 1);
-        const withSell = rows.filter(r => r.sell !== null && r.sell >= 1);
+        const withBuy = rows.filter(r => r.buy !== null && r.buy >= MINP);
+        const withSell = rows.filter(r => r.sell !== null && r.sell >= MINP);
         const bestBuyRow = withBuy.length ? withBuy.reduce((a, b) => b.buy < a.buy ? b : a) : null;
         const bestSellRow = withSell.length ? withSell.reduce((a, b) => b.sell > a.sell ? b : a) : null;
 
         rows.forEach(r => {
-            if (r.buy !== null && r.sell !== null && r.buy >= 1 && r.sell >= 1) {
+            if (r.buy !== null && r.sell !== null && r.buy >= MINP && r.sell >= MINP) {
                 r.spreadAbs = r.buy - r.sell;
                 r.spreadPct = r.spreadAbs >= 0 ? r.spreadAbs / r.buy : Infinity;
             } else {
@@ -429,8 +451,8 @@
         });
 
         const visibleRows = rows.filter(r =>
-            (r.buy !== null && r.buy >= 1) ||
-            (r.sell !== null && r.sell >= 1)
+            (r.buy !== null && r.buy >= MINP) ||
+            (r.sell !== null && r.sell >= MINP)
         );
 
         const avgBuyVal = withBuy.length ? withBuy.reduce((s, r) => s + r.buy, 0) / withBuy.length : null;
@@ -525,16 +547,16 @@
 
         // Left: avg buy
         heroAvgBuyEl.textContent = s.avgBuyVal != null ? fmt(s.avgBuyVal) : '--';
-        heroAvgBuyN.textContent = 'USDT \u2192 XMR \u00b7 you pay per XMR';
+        heroAvgBuyN.textContent = PAIR.quoteLabel + ' \u2192 XMR \u00b7 you pay per XMR';
 
         // Right: avg sell
         heroAvgSellEl.textContent = s.avgSellVal != null ? fmt(s.avgSellVal) : '--';
-        heroAvgSellN.textContent = 'XMR \u2192 USDT \u00b7 you receive per XMR';
+        heroAvgSellN.textContent = 'XMR \u2192 ' + PAIR.quoteLabel + ' \u00b7 you receive per XMR';
     }
 
     // -- Table ---------------------------------------------------------------
     function pClass(val, best, worst) {
-        if (val === null || val < 1) return '';
+        if (val === null || val < MINP) return '';
         return eq(val, best) ? 'price-good' : eq(val, worst) ? 'price-bad' : '';
     }
 
@@ -556,8 +578,8 @@
                 const key = r.exchange.trim().toLowerCase();
                 const sponsorCls = isSponsor(r.siteName) ? ' is-sponsor' : '';
                 prev.set(key, { buy: r.buy, sell: r.sell });
-                const bT = (r.buy !== null && r.buy >= 1) ? fmt(r.buy) : '--';
-                const sT = (r.sell !== null && r.sell >= 1) ? fmt(r.sell) : '--';
+                const bT = (r.buy !== null && r.buy >= MINP) ? fmt(r.buy) : '--';
+                const sT = (r.sell !== null && r.sell >= MINP) ? fmt(r.sell) : '--';
                 const ts = r.tsUtc ? new Date(r.tsUtc).toLocaleTimeString() : '--';
                 const tsTitle = r.tsUtc ? utcString(new Date(r.tsUtc)) : '';
                 return `<tr class="data-row${sponsorCls}" data-ex="${esc(key)}">
@@ -605,8 +627,8 @@
             const minAmountCell = tr.querySelector('[data-col="minamount"]');
             const tsCell = tr.querySelector('[data-col="ts"]');
 
-            const bT = (r.buy !== null && r.buy >= 1) ? fmt(r.buy) : '--';
-            const sT = (r.sell !== null && r.sell >= 1) ? fmt(r.sell) : '--';
+            const bT = (r.buy !== null && r.buy >= MINP) ? fmt(r.buy) : '--';
+            const sT = (r.sell !== null && r.sell >= MINP) ? fmt(r.sell) : '--';
             const bC = pClass(r.buy, bestBuy, worstBuy);
             const sC = pClass(r.sell, bestSell, worstSell);
 
@@ -653,7 +675,9 @@
     // -- Fetch ---------------------------------------------------------------
     async function refresh() {
         try {
-            const res = await fetch('/api/prices/two-way?base=XMR&quote=USDTTRC', { cache: 'no-store' });
+            const res = await fetch('/api/prices/two-way?base=' +
+                encodeURIComponent(PAIR.base) + '&quote=' +
+                encodeURIComponent(PAIR.apiQuote), { cache: 'no-store' });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
             if (!Array.isArray(data)) throw new Error('Bad JSON');
@@ -716,6 +740,10 @@
     const note = document.getElementById('convNote');
     if (!usdInput || !xmrInput) return;
 
+    // Same per-page pair config used by the main script. The left field holds
+    // the quote currency (USDT, BTC, ETH) — not necessarily USD.
+    const P = Object.assign({ symbol: '$', suffix: '', decimals: 2 }, window.__PAIR__ || {});
+
     let lastEdited = 'usd';
 
     function getMarketPrice() {
@@ -730,7 +758,7 @@
         return null;
     }
 
-    function fmtUsd(n) { return n.toFixed(2); }
+    function fmtUsd(n) { return n.toFixed(P.decimals); }
     function fmtXmr(n) { return n.toFixed(6).replace(/\.?0+$/, ''); }
 
     function recalc() {
@@ -739,7 +767,7 @@
             note.textContent = 'Waiting for market price…';
             return;
         }
-        note.textContent = `Based on market price $${price.toFixed(2)}/XMR`;
+        note.textContent = `Based on market price ${P.symbol}${price.toFixed(P.decimals)}${P.suffix}/XMR`;
 
         if (lastEdited === 'usd') {
             const usd = parseFloat(usdInput.value);

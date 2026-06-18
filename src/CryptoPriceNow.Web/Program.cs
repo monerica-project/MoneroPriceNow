@@ -1,6 +1,7 @@
 using CryptoPriceNow.Data;
 using CryptoPriceNow.Data.Services;
 using CryptoPriceNow.Services;
+using CryptoPriceNow.Web.Models;
 using CryptoPriceNow.Web.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -138,14 +139,20 @@ app.MapGet("/api/history", async (
         return Results.Ok(new { enabled = false, points = Array.Empty<object>() });
 
     // Only allow pairs the warmer actually tracks — prevents arbitrary-string
-    // queries against the table.
-    var requestedPair = string.IsNullOrWhiteSpace(pair) ? "XMR/USDT:Tron" : pair.Trim();
-    if (!requestedPair.Equals("XMR/USDT:Tron", StringComparison.OrdinalIgnoreCase))
+    // queries against the table. The allow-list is the catalog itself, so any
+    // pair added in PairCatalog.All is queryable here automatically.
+    var requestedPair = string.IsNullOrWhiteSpace(pair)
+        ? PairCatalog.Usdt.HistoryPair
+        : pair.Trim();
+
+    var trackedPair = PairCatalog.All
+        .FirstOrDefault(p => p.HistoryPair.Equals(requestedPair, StringComparison.OrdinalIgnoreCase));
+    if (trackedPair is null)
         return Results.BadRequest(new { error = "unknown pair" });
 
     try
     {
-        var result = await history.GetHistoryAsync("XMR/USDT:Tron", range, ct);
+        var result = await history.GetHistoryAsync(trackedPair.HistoryPair, range, ct);
 
         // Which range presets have enough history behind them to be worth showing?
         // A range is available once data spans at least that far back. The shortest

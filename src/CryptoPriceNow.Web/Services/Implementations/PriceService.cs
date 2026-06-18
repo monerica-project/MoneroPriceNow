@@ -235,6 +235,7 @@ public sealed class PriceService : IPriceService
     private Task<PriceResult?> GetOneExchangeSellAsync(
         IExchangePriceApi api, AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
     {
+        if (!QuoteSupported(api.ExchangeKey, quoteRef)) return Task.FromResult<PriceResult?>(null);
         var key = $"sell:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}";
         var ttl = TimeSpan.FromSeconds(Math.Clamp(opt.PriceCacheSeconds, 1, 300));
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
@@ -248,6 +249,7 @@ public sealed class PriceService : IPriceService
         string exchangeKey, IExchangeBuyPriceApi api,
         AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
     {
+        if (!QuoteSupported(exchangeKey, quoteRef)) return Task.FromResult<PriceResult?>(null);
         var key = $"buy:{exchangeKey}:{baseRef.Key}->{quoteRef.Key}";
         var ttl = TimeSpan.FromSeconds(Math.Clamp(opt.PriceCacheSeconds, 1, 300));
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
@@ -260,6 +262,7 @@ public sealed class PriceService : IPriceService
     private Task<PriceResult?> GetOneExchangePriceAsync(
         IExchangePriceApi api, AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
     {
+        if (!QuoteSupported(api.ExchangeKey, quoteRef)) return Task.FromResult<PriceResult?>(null);
         var key = $"price:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}";
         var ttl = TimeSpan.FromSeconds(Math.Clamp(opt.PriceCacheSeconds, 1, 300));
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
@@ -329,6 +332,42 @@ public sealed class PriceService : IPriceService
     }
 
     private static string PairKey(AssetRef b, AssetRef q) => $"{b.Key}->{q.Key}";
+
+    // ── Per-exchange quote support ────────────────────────────────────────────
+    // Some clients were written for XMR/USDT only: they ignore query.Quote and
+    // quote against USDT, so for BTC/ETH they return a USD-denominated number
+    // mislabeled as the requested quote (e.g. ~318 "BTC"). Until a client is
+    // taught to price a quote natively, list the quotes it CAN price here.
+    //
+    // Absent from this map  = client already honors query.Quote (prices any quote).
+    // Present in this map    = client can ONLY price the listed quote tickers;
+    //                          for anything else it is skipped and drops off the
+    //                          page for that pair (a null/null row is filtered
+    //                          out client-side).
+    //
+    // To enable, say, BTC on an exchange: teach its client to use query.Quote,
+    // then add "BTC" to its list here (or remove the entry to allow everything).
+    private static readonly IReadOnlyDictionary<string, string[]> QuoteSupport =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["bitxchange"]  = ["USDT"],
+            ["ccecash"]     = ["USDT"], // honors query.Quote in code but still emits USD for BTC/ETH — confirm before enabling
+            ["changehero"]  = ["USDT"],
+            ["cyphergoat"]  = ["USDT"],
+            ["quickex"]     = ["USDT"],
+            ["sageswap"]    = ["USDT"],
+            ["secureshift"] = ["USDT"],
+            ["stereoswap"]  = ["USDT"],
+            ["swapgate"]    = ["USDT"],
+            ["swapter"]     = ["USDT"],
+            ["trocador"]    = ["USDT"],
+            ["xgram"]       = ["USDT"],
+        };
+
+    private static bool QuoteSupported(string exchangeKey, AssetRef quote)
+        => !QuoteSupport.TryGetValue(exchangeKey, out var allowed)
+           || allowed.Contains(quote.Ticker ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+
 
     private static AssetRef ParseAsset(string s)
     {
