@@ -161,7 +161,7 @@ public sealed class GhostSwapClient : IGhostSwapClient
         var to = ResolveCode(query.Base);    // receive XMR
         if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to)) return null;
 
-        var probe = opt.BuyReferenceAmountUsdt > 0 ? opt.BuyReferenceAmountUsdt : 100m;
+        var probe = query.ProbeAmount ?? (opt.BuyReferenceAmountUsdt > 0 ? opt.BuyReferenceAmountUsdt : 100m);
 
         foreach (var (f, t) in ExpandPairCandidates(from, to))
         {

@@ -128,29 +128,39 @@ public sealed class ZeroTraceClient : IZeroTraceClient
     }
 
     // =========================
-    // BUY: ? USDT → 1 XMR
-    // direction="to", amount="1" — data.from.amount is the USDT we'd send.
+    // BUY: ? quote → 1 XMR
+    // Use direction="from" (exact-input) — the same shape the SELL path uses
+    // successfully. 0trace's float quotes reject direction="to" (exact-output),
+    // which is why the old buy returned nothing for BTC/ETH. So: send a probe of
+    // the quote, read the XMR received (data.to.amount), and invert to get
+    // quote-per-XMR.
     // =========================
     public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
-        var fromCcy = ResolveCode(query.Quote); // pay USDT
+        var fromCcy = ResolveCode(query.Quote); // pay the quote (USDT/BTC/ETH)
         var toCcy = ResolveCode(query.Base);    // receive XMR
         if (string.IsNullOrWhiteSpace(fromCcy) || string.IsNullOrWhiteSpace(toCcy)) return null;
+
+        // Quote-denominated probe (BTC/ETH supplied by PriceService; USDT default 200).
+        var probe = query.ProbeAmount ?? 200m;
 
         var dto = await PostPriceAsync(
             type: "float",
             fromCcy: fromCcy,
             toCcy: toCcy,
-            direction: "to",
-            amount: 1m,
+            direction: "from",   // exact-input — what 0trace actually supports
+            amount: probe,
             ct: ct);
 
-        if (dto?.Data?.From is null) return null;
+        if (dto?.Data?.To is null) return null;
         if (dto.Code != 0) return null;
-        if (dto.Data.From.Amount <= 0) return null;
 
-        // from is USDT here, so from.min is already approximately USD.
-        if (dto.Data.From.Min > 0 && IsUsdStable(fromCcy))
+        var sent = dto.Data.From?.Amount ?? probe; // quote actually used
+        var xmrOut = dto.Data.To.Amount;           // XMR received for that quote
+        if (sent <= 0 || xmrOut <= 0) return null;
+
+        // from.min is in quote units — approximately USD only when the quote is a stable.
+        if (dto.Data.From?.Min > 0 && IsUsdStable(fromCcy))
         {
             lock (_apiMinAmountLock)
                 _apiMinAmountUsd = dto.Data.From.Min;
@@ -160,7 +170,7 @@ public sealed class ZeroTraceClient : IZeroTraceClient
             Exchange: ExchangeKey,
             Base: query.Base,
             Quote: query.Quote,
-            Price: dto.Data.From.Amount, // USDT to send per 1 XMR
+            Price: sent / xmrOut, // quote to send per 1 XMR
             TimestampUtc: DateTimeOffset.UtcNow,
             CorrelationId: null,
             Raw: null

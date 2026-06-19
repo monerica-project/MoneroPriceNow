@@ -77,7 +77,7 @@ public sealed class EtzSwapClient : IEtzSwapClient
     public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
         // from = USDT (query.Quote), to = XMR (query.Base)
-        var data = await ResolveAndQuoteAsync(query.Quote, query.Base, amountFrom: 500m, ct);
+        var data = await ResolveAndQuoteAsync(query.Quote, query.Base, amountFrom: query.ProbeAmount ?? 500m, ct);
         if (data is null) return null;
 
         if (data.MinAmountFrom > 0)

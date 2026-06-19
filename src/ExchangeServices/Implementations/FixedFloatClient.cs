@@ -91,7 +91,7 @@ public sealed class FixedFloatClient : IFixedFloatClient
     {
         if (!HasAuth()) return null;
 
-        const decimal probeUsdt = 500m;
+        var probeUsdt = query.ProbeAmount ?? 500m;
 
         foreach (var fromCcy in CurrencyCodeCandidates(query.Quote)) // USDTTRC
             foreach (var toCcy in CurrencyCodeCandidates(query.Base))   // XMR

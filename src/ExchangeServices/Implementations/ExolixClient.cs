@@ -145,7 +145,7 @@ public sealed class ExolixClient : IExolixClient
     // BUY: how much USDT to send to receive 1 XMR.
     public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
-        var rate = await QuoteXmrUsdtAsync(query, usdtIsFrom: true, amount: 500m, ct);
+        var rate = await QuoteXmrUsdtAsync(query, usdtIsFrom: true, amount: query.ProbeAmount ?? 500m, ct);
         if (rate is null || rate.FromAmount <= 0 || rate.ToAmount <= 0) return null;
 
         // coinFrom is USDT here, so rate.MinAmount is in USDT ≈ USD.

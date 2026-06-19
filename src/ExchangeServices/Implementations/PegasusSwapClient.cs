@@ -128,7 +128,7 @@ public sealed class PegasusSwapClient : IPegasusSwapClient
         var networkFrom = PegasusNetwork(query.Quote);   // USDT -> 'ETH'
         var networkTo = PegasusNetwork(query.Base);      // XMR -> 'XMR'
 
-        const decimal probeUsdt = 500m;
+        var probeUsdt = query.ProbeAmount ?? 500m;
 
         var dto = await CallExchangeCoinAsync(
             amount: probeUsdt,

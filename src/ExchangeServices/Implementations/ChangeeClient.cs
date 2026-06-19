@@ -68,7 +68,7 @@ public sealed class ChangeeClient : IChangeeClient
         var from = ResolveSymbol(query.Quote); // USDT
         var to = ResolveSymbol(query.Base);  // XMR
 
-        const decimal probeUsdt = 200m;
+        var probeUsdt = query.ProbeAmount ?? 200m;
         var dto = await GetRateAsync(from, to, probeUsdt, ct);
         if (dto is null || dto.Result != true || dto.Rate <= 0) return null;
 

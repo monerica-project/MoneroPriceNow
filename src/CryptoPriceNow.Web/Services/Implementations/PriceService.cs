@@ -255,7 +255,7 @@ public sealed class PriceService : IPriceService
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
         {
             var (rb, rq) = await ResolveExchangeIdsAsync(exchangeKey, baseRef, quoteRef, ct);
-            return await api.GetBuyPriceAsync(new PriceQuery(rb, rq), ct);
+            return await api.GetBuyPriceAsync(new PriceQuery(rb, rq, ProbeForQuote(rq)), ct);
         });
     }
 
@@ -367,6 +367,21 @@ public sealed class PriceService : IPriceService
     private static bool QuoteSupported(string exchangeKey, AssetRef quote)
         => !QuoteSupport.TryGetValue(exchangeKey, out var allowed)
            || allowed.Contains(quote.Ticker ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+
+    // Buy-side probe size, denominated in the quote currency, handed to clients
+    // that quote "buy" by sending a fixed amount and reading XMR out. Their own
+    // defaults are sized for USDT (~100–500), which is absurd as "500 BTC" and
+    // overshoots every max — so for crypto quotes we supply a sane amount here.
+    // null = leave the client's own default (USDT path unchanged). These are
+    // ~a few hundred USD worth at typical rates; tune per quote as needed.
+    private static decimal? ProbeForQuote(AssetRef quote) =>
+        (quote.Ticker ?? string.Empty).Trim().ToUpperInvariant() switch
+        {
+            "BTC" => 0.01m,
+            "ETH" => 0.3m,
+            _ => null, // USDT / stablecoins: keep the client's existing default
+        };
+
 
 
     private static AssetRef ParseAsset(string s)
