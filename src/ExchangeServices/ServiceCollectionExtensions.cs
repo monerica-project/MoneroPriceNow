@@ -48,6 +48,8 @@ public static class ServiceCollectionExtensions
         services.AddTrocador(config);
         services.AddZeroTrace(config);
         services.AddGhostSwap(config);
+        services.AddWizardSwap(config);
+
 
         //  services.AddChangeHero(config);
 
@@ -65,7 +67,7 @@ public static class ServiceCollectionExtensions
 
 
         //    services.AddWagyu(config);
-        // services.AddWizardSwap(config);
+        
         //  
         //    
 

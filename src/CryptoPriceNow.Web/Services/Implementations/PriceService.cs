@@ -362,6 +362,11 @@ public sealed class PriceService : IPriceService
             ["swapter"]     = ["USDT"],
             ["trocador"]    = ["USDT"],
             ["xgram"]       = ["USDT"],
+
+            // WizardSwap has no USDT listing — it can only price crypto quotes.
+            // Restrict it to BTC/ETH so it surfaces on those pages and is skipped
+            // (drops off) on the USDT page instead of firing a doomed estimate.
+            ["wizardswap"]  = ["BTC", "ETH"],
         };
 
     private static bool QuoteSupported(string exchangeKey, AssetRef quote)

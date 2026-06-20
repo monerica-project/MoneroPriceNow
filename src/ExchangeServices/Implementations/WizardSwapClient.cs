@@ -137,8 +137,8 @@ public sealed class WizardSwapClient : IWizardSwapClient
     /// <summary>
     /// BUY: QUOTE required to buy 1 BASE
     /// WizardSwap has only amount_from, so we invert:
-    ///   get (BASE per 1 QUOTE) by estimating QUOTE -> BASE with amount_from=1,
-    ///   then buyCost = 1 / (BASE per 1 QUOTE).
+    ///   send `probe` QUOTE, read BASE out, then buyCost = probe / baseOut.
+    ///   probe comes from PriceService (per-quote sized), defaulting to 1.
     /// </summary>
     public async Task<PriceResult?> GetBuyPriceAsync(PriceQuery query, CancellationToken ct = default)
     {
@@ -146,11 +146,16 @@ public sealed class WizardSwapClient : IWizardSwapClient
         var quoteSym = ResolveSymbol(query.Quote);
         if (string.IsNullOrWhiteSpace(baseSym) || string.IsNullOrWhiteSpace(quoteSym)) return null;
 
-        // Estimate: if I send 1 QUOTE, how much BASE do I get?
-        var basePerOneQuote = await EstimateAsync(quoteSym, baseSym, amountFrom: 1m, ct);
-        if (basePerOneQuote is null || basePerOneQuote <= 0m) return null;
+        // Probe size is denominated in the QUOTE currency. PriceService supplies a
+        // sane per-quote amount (~0.01 BTC / 0.3 ETH) so we clear WizardSwap's min
+        // without blowing past its max — 1 BTC/ETH overshoots and nulls the buy side.
+        var probe = query.ProbeAmount is > 0m ? query.ProbeAmount.Value : 1m;
 
-        var cost = 1m / basePerOneQuote.Value; // quote needed for 1 base
+        // Estimate: if I send `probe` QUOTE, how much BASE do I get?
+        var baseOut = await EstimateAsync(quoteSym, baseSym, amountFrom: probe, ct);
+        if (baseOut is null || baseOut <= 0m) return null;
+
+        var cost = probe / baseOut.Value; // quote needed for 1 base
         if (cost <= 0m) return null;
 
         return new PriceResult(
@@ -193,21 +198,9 @@ public sealed class WizardSwapClient : IWizardSwapClient
         if (status is null || string.IsNullOrWhiteSpace(body)) return null;
         if ((int)status < 200 || (int)status >= 300) return null;
 
-        // Docs show: { "amount_to": Float } or "amount_to" is present.
-        // Some implementations may return a raw number; handle both.
-        if (TryParseNumberBody(body, out var rawNum))
-            return rawNum;
-
-        try
-        {
-            var dto = JsonSerializer.Deserialize<EstimateResponse>(body, JsonOpts);
-            if (dto is null) return null;
-            return dto.AmountTo > 0m ? dto.AmountTo : null;
-        }
-        catch
-        {
-            return null;
-        }
+        // WizardSwap returns {"estimated_amount":"0.0048"} (the published docs
+        // wrongly say "amount_to"). Pull the number out regardless of shape.
+        return ExtractAmount(body);
     }
 
     private sealed class EstimateRequest
@@ -225,10 +218,52 @@ public sealed class WizardSwapClient : IWizardSwapClient
         public string? ApiKey { get; set; }
     }
 
-    private sealed class EstimateResponse
+    /// <summary>
+    /// Reads the estimate amount out of whatever WizardSwap returns: an object
+    /// with estimated_amount / amount_to (number or string), or a bare/quoted
+    /// number. Returns null if nothing positive is found.
+    /// </summary>
+    private static decimal? ExtractAmount(string body)
     {
-        [JsonPropertyName("amount_to")]
-        public decimal AmountTo { get; set; }
+        var s = (body ?? "").Trim();
+        if (s.Length == 0) return null;
+
+        // bare number  0.0048   or quoted  "0.0048"
+        if (TryParseNumberBody(s, out var raw))
+            return raw > 0m ? raw : (decimal?)null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(s);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var key in new[] { "estimated_amount", "amount_to", "amountTo", "amount", "result", "rate" })
+                {
+                    if (root.TryGetProperty(key, out var el) && TryReadDecimal(el, out var v) && v > 0m)
+                        return v;
+                }
+                return null;
+            }
+
+            return TryReadDecimal(root, out var rv) && rv > 0m ? rv : (decimal?)null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool TryReadDecimal(JsonElement el, out decimal value)
+    {
+        value = 0m;
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetDecimal(out value))
+            return true;
+        if (el.ValueKind == JsonValueKind.String &&
+            decimal.TryParse(el.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            return true;
+        return false;
     }
 
     private static bool TryParseNumberBody(string body, out decimal value)
