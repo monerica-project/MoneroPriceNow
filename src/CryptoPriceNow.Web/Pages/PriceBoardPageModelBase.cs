@@ -13,11 +13,19 @@ namespace CryptoPriceNow.Pages;
 public abstract class PriceBoardPageModelBase : PageModel
 {
     private readonly IPriceService _prices;
+    private readonly INetworkFeeService _fees;
 
-    protected PriceBoardPageModelBase(IPriceService prices) => _prices = prices;
+    protected PriceBoardPageModelBase(IPriceService prices, INetworkFeeService fees)
+    {
+        _prices = prices;
+        _fees = fees;
+    }
 
     /// <summary>The pair this page renders. Set by the subclass before LoadAsync.</summary>
     public PriceBoardView Pair { get; protected set; } = PairCatalog.Usdt;
+
+    /// <summary>Current on-chain fee for this page's network (null if unavailable).</summary>
+    public NetworkFee? NetworkFee { get; private set; }
 
     public async Task LoadAsync(CancellationToken ct)
     {
@@ -39,5 +47,15 @@ public abstract class PriceBoardPageModelBase : PageModel
             // Fall back to empty — JS will fetch via AJAX on boot as before.
             ViewData["InitialPricesJson"] = "[]";
         }
+
+        // On-chain fee for this page's network (Monero / Bitcoin / Ethereum).
+        if (!string.IsNullOrEmpty(Pair.FeeNetwork))
+        {
+            try { NetworkFee = await _fees.GetFeeAsync(Pair.FeeNetwork, ct); }
+            catch { NetworkFee = null; }
+        }
+
+        // Shared with the _PriceBoard partial (whose model is the PriceBoardView).
+        ViewData["NetworkFee"] = NetworkFee;
     }
 }

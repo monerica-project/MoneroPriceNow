@@ -9,6 +9,7 @@ public sealed class PriceDbContext : DbContext
 
     public DbSet<Exchange> Exchanges => Set<Exchange>();
     public DbSet<PriceQuote> PriceQuotes => Set<PriceQuote>();
+    public DbSet<NetworkFeeQuote> NetworkFeeQuotes => Set<NetworkFeeQuote>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -41,6 +42,20 @@ public sealed class PriceDbContext : DbContext
             e.HasIndex(x => new { x.ExchangeId, x.TimestampUtc });
 
             // Retention pruning: DELETE WHERE TimestampUtc < cutoff
+            e.HasIndex(x => x.TimestampUtc);
+        });
+
+        b.Entity<NetworkFeeQuote>(e =>
+        {
+            e.Property(x => x.Network).HasMaxLength(32).IsRequired();
+            e.Property(x => x.NativeUnit).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Native).HasPrecision(28, 6);
+            e.Property(x => x.UsdPerTx).HasPrecision(18, 6);
+
+            // Charting query: WHERE Network = ? AND TimestampUtc >= ? GROUP BY date_bin(...)
+            e.HasIndex(x => new { x.Network, x.TimestampUtc });
+
+            // Retention pruning
             e.HasIndex(x => x.TimestampUtc);
         });
     }

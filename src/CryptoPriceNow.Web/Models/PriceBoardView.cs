@@ -60,6 +60,12 @@ public sealed record PriceBoardView
     /// <summary>Route slug. Empty string = site root "/". Otherwise e.g. "xmr-btc".</summary>
     public required string Slug { get; init; }
 
+    /// <summary>
+    /// Which chain's on-chain fee to show on this page: "monero" on the root XMR
+    /// page, "bitcoin" on XMR/BTC, "ethereum" on XMR/ETH. Empty = no fee widget.
+    /// </summary>
+    public string FeeNetwork { get; init; } = "";
+
     /// <summary>Relative URL for this page ("/" for root).</summary>
     public string Url => string.IsNullOrEmpty(Slug) ? "/" : "/" + Slug;
 }
@@ -83,7 +89,8 @@ public static class PairCatalog
         MinValidPrice = 1m,
         IsUsd = true,
         Title = "MoneroPriceNow.com — Live XMR / USDT Prices",
-        Slug = "" // root
+        Slug = "", // root
+        FeeNetwork = "monero"
     };
 
     public static readonly PriceBoardView Btc = new()
@@ -99,7 +106,8 @@ public static class PairCatalog
         MinValidPrice = 0.0000001m,
         IsUsd = false,
         Title = "MoneroPriceNow.com — Live XMR / BTC Prices",
-        Slug = "xmr-btc"
+        Slug = "xmr-btc",
+        FeeNetwork = "bitcoin"
     };
 
     public static readonly PriceBoardView Eth = new()
@@ -115,7 +123,8 @@ public static class PairCatalog
         MinValidPrice = 0.000001m,
         IsUsd = false,
         Title = "MoneroPriceNow.com — Live XMR / ETH Prices",
-        Slug = "xmr-eth"
+        Slug = "xmr-eth",
+        FeeNetwork = "ethereum"
     };
 
     /// <summary>All supported pairs, in tab-display order.</summary>

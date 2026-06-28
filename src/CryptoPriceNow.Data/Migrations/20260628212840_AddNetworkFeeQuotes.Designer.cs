@@ -3,6 +3,7 @@ using System;
 using CryptoPriceNow.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CryptoPriceNow.Data.Migrations
 {
     [DbContext(typeof(PriceDbContext))]
-    partial class PriceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260628212840_AddNetworkFeeQuotes")]
+    partial class AddNetworkFeeQuotes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

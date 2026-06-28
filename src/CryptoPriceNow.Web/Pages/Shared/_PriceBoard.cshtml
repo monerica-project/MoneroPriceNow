@@ -4,6 +4,7 @@
 @{
     var initialPricesJson = (ViewData["InitialPricesJson"] as string) ?? "[]";
     var minValid = Model.MinValidPrice.ToString(CultureInfo.InvariantCulture);
+    var networkFee = ViewData["NetworkFee"] as CryptoPriceNow.Web.Models.NetworkFee;
 }
 
 <link rel="stylesheet" href="~/css/pricechart.css" asp-append-version="true" />
@@ -73,6 +74,38 @@
         <span id="countdownText">15s</span>
     </div>
 </div>
+
+@if (networkFee is { HasData: true })
+{
+    <!-- Current on-chain network fee for this coin -->
+    <section class="netfee" aria-label="@networkFee.Title" data-network="@networkFee.Network">
+        <div class="netfee-head">
+            <span class="netfee-title">@networkFee.Title</span>
+            <span class="netfee-headright">
+                <span class="netfee-updated"></span>
+                <span class="netfee-live">live</span>
+            </span>
+        </div>
+        <div class="netfee-grid">
+            @foreach (var tier in networkFee.Tiers)
+            {
+                <div class="netfee-tier">
+                    <div class="netfee-tier-label">@tier.Label</div>
+                    <div class="netfee-tier-primary">@tier.Primary</div>
+                    @if (!string.IsNullOrEmpty(tier.Usd))
+                    {
+                        <div class="netfee-tier-usd">≈ @tier.Usd</div>
+                    }
+                    <div class="netfee-tier-sub">@tier.Secondary</div>
+                </div>
+            }
+        </div>
+        @if (!string.IsNullOrEmpty(networkFee.Note))
+        {
+            <div class="netfee-note">@networkFee.Note</div>
+        }
+    </section>
+}
 
 <!-- Quick converter -->
 <div class="converter">
@@ -146,6 +179,36 @@
     </div>
 </div>
 
+@if (!string.IsNullOrEmpty(Model.FeeNetwork))
+{
+    var feeNetTitle = char.ToUpper(Model.FeeNetwork[0]) + Model.FeeNetwork[1..];
+    <!-- Network fee history chart (hidden until /api/fee-history confirms data) -->
+    <div class="chart-section" id="feeChartSection" hidden>
+        <div class="chart-head">
+            <div class="chart-title-wrap">
+                <span class="chart-title">@feeNetTitle Fee History</span>
+                <span class="chart-trend" id="feeChartTrend"></span>
+            </div>
+            <div class="chart-ranges" id="feeChartRanges" role="group" aria-label="Fee chart time range">
+                <button type="button" class="chart-range-btn chart-range-active" data-range="1h">1h</button>
+                <button type="button" class="chart-range-btn" data-range="4h" hidden>4h</button>
+                <button type="button" class="chart-range-btn" data-range="12h" hidden>12h</button>
+                <button type="button" class="chart-range-btn" data-range="1d" hidden>1d</button>
+                <button type="button" class="chart-range-btn" data-range="3d" hidden>3d</button>
+                <button type="button" class="chart-range-btn" data-range="7d" hidden>7d</button>
+                <button type="button" class="chart-range-btn" data-range="30d" hidden>30d</button>
+            </div>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="feeChart" aria-label="@feeNetTitle network fee history chart" role="img"></canvas>
+            <div class="chart-empty" id="feeChartEmpty" hidden>Collecting fee history… check back in a few minutes.</div>
+        </div>
+        <div class="chart-note">
+            Typical-transaction fee over time · <span class="chart-key chart-key-market">USD</span> · auto-refreshing
+        </div>
+    </div>
+}
+
 <!-- Privacy legend -->
 <div class="privacy-legend">
     <span class="pl-title">Privacy levels:</span>
@@ -204,13 +267,16 @@
         suffix: "@Model.Suffix",
         decimals: @Model.Decimals,
         minValidPrice: @minValid,
-        isUsd: @(Model.IsUsd ? "true" : "false")
+        isUsd: @(Model.IsUsd ? "true" : "false"),
+        feeNetwork: "@Model.FeeNetwork"
     };
     window.__INITIAL_PRICES__ = @Html.Raw(initialPricesJson);
 </script>
 <script src="~/js/moneropricenow.js" asp-append-version="true"></script>
 <script src="~/lib/chartjs/chart.umd.min.js" asp-append-version="true"></script>
 <script src="~/js/pricechart.js" asp-append-version="true"></script>
+<script src="~/js/feechart.js" asp-append-version="true"></script>
+<script src="~/js/netfee.js" asp-append-version="true"></script>
 
 <style>
     /* Pair tabs — minimal, self-contained. Move into your main CSS later if you prefer. */

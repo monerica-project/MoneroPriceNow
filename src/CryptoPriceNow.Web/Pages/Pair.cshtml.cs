@@ -6,7 +6,7 @@ namespace CryptoPriceNow.Pages;
 
 public sealed class PairModel : PriceBoardPageModelBase
 {
-    public PairModel(IPriceService prices) : base(prices) { }
+    public PairModel(IPriceService prices, INetworkFeeService fees) : base(prices, fees) { }
 
     // Route is /xmr-{quote}; the full slug is "xmr-{quote}".
     public async Task<IActionResult> OnGetAsync(string quote, CancellationToken ct)

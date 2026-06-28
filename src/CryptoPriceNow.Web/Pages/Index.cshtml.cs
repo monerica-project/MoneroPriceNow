@@ -5,7 +5,7 @@ namespace CryptoPriceNow.Pages;
 
 public sealed class IndexModel : PriceBoardPageModelBase
 {
-    public IndexModel(IPriceService prices) : base(prices) { }
+    public IndexModel(IPriceService prices, INetworkFeeService fees) : base(prices, fees) { }
 
     public Task OnGetAsync(CancellationToken ct)
     {

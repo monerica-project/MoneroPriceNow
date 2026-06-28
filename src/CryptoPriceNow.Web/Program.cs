@@ -25,6 +25,11 @@ builder.Services.AddSingleton<IPriceService, PriceService>();
 // Background warmer — fetches all prices on startup and every N seconds.
 builder.Services.AddHostedService<PriceWarmingService>();
 
+// On-chain network/gas fees (BTC/ETH/XMR) — free public sources, no key needed.
+builder.Services.Configure<NetworkFeeOptions>(builder.Configuration.GetSection("NetworkFee"));
+builder.Services.AddSingleton<INetworkFeeService, NetworkFeeService>();
+builder.Services.AddHostedService<NetworkFeeWarmingService>();
+
 var app = builder.Build();
 
 // ── Database migration on startup ────────────────────────────────────────────
@@ -187,6 +192,97 @@ app.MapGet("/api/history", async (
     catch
     {
         // DB temporarily unreachable — degrade gracefully, don't 500 the chart.
+        return Results.Ok(new { enabled = false, points = Array.Empty<object>() });
+    }
+});
+
+// Current network fee for a coin — polled by the live summary block so the
+// fee values (and their change direction) update without a page reload.
+app.MapGet("/api/network-fee", async (
+    HttpContext http,
+    string? network,
+    CancellationToken ct) =>
+{
+    var svc = http.RequestServices.GetService<INetworkFeeService>();
+    if (svc is null) return Results.Ok(new { ok = false });
+
+    var requested = (network ?? "").Trim().ToLowerInvariant();
+    var tracked = PairCatalog.All
+        .Select(p => p.FeeNetwork)
+        .FirstOrDefault(n => !string.IsNullOrEmpty(n) && n.Equals(requested, StringComparison.OrdinalIgnoreCase));
+    if (tracked is null) return Results.BadRequest(new { error = "unknown network" });
+
+    var fee = await svc.GetFeeAsync(tracked, ct);
+    if (fee is null) return Results.Ok(new { ok = false });
+
+    return Results.Ok(new
+    {
+        ok = true,
+        network = fee.Network,
+        title = fee.Title,
+        note = fee.Note,
+        updatedAtMs = fee.UpdatedAtUtc.ToUnixTimeMilliseconds(),
+        tiers = fee.Tiers.Select(t => new
+        {
+            label = t.Label,
+            primary = t.Primary,
+            secondary = t.Secondary,
+            usd = t.Usd
+        })
+    });
+});
+
+// Network-fee history (BTC/ETH/XMR) for the per-page fee chart.
+app.MapGet("/api/fee-history", async (
+    HttpContext http,
+    string? network,
+    string? range,
+    CancellationToken ct) =>
+{
+    var history = http.RequestServices.GetService<NetworkFeeHistoryService>();
+    if (history is null)
+        return Results.Ok(new { enabled = false, points = Array.Empty<object>() });
+
+    // Allow-list: only the networks our pages actually track.
+    var requested = (network ?? "").Trim().ToLowerInvariant();
+    var tracked = PairCatalog.All
+        .Select(p => p.FeeNetwork)
+        .FirstOrDefault(n => !string.IsNullOrEmpty(n) && n.Equals(requested, StringComparison.OrdinalIgnoreCase));
+    if (tracked is null)
+        return Results.BadRequest(new { error = "unknown network" });
+
+    try
+    {
+        var result = await history.GetHistoryAsync(tracked, range, ct);
+
+        var now = DateTimeOffset.UtcNow;
+        var span = result.OldestUtc.HasValue ? now - result.OldestUtc.Value : TimeSpan.Zero;
+        var presets = NetworkFeeHistoryService.Presets;
+        var available = presets
+            .Where((p, i) => i == 0 || span >= p.Range)
+            .Select(p => p.Key)
+            .ToArray();
+
+        return Results.Ok(new
+        {
+            enabled = true,
+            network = result.Network,
+            range = result.RangeKey,
+            bucketSeconds = result.BucketSeconds,
+            oldestMs = result.OldestUtc?.ToUnixTimeMilliseconds(),
+            availableRanges = available,
+            points = result.Points.Select(p => new
+            {
+                t = p.BucketUtc.ToUnixTimeMilliseconds(),
+                usd = p.AvgUsdPerTx,
+                native = p.AvgNative,
+                n = p.Samples
+            })
+        });
+    }
+    catch (OperationCanceledException) { throw; }
+    catch
+    {
         return Results.Ok(new { enabled = false, points = Array.Empty<object>() });
     }
 });

@@ -19,11 +19,13 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services, IConfiguration config)
     {
         services.Configure<QuoteLoggingOptions>(config.GetSection("QuoteLogging"));
+        services.Configure<FeeLoggingOptions>(config.GetSection("FeeLogging"));
 
         var cs = config.GetConnectionString("PriceDb");
         if (string.IsNullOrWhiteSpace(cs))
         {
             services.AddSingleton<IPriceQuoteSink, NullPriceQuoteSink>();
+            services.AddSingleton<INetworkFeeQuoteSink, NullNetworkFeeQuoteSink>();
             return services;
         }
 
@@ -36,6 +38,13 @@ public static class ServiceCollectionExtensions
         services.AddHostedService(sp => sp.GetRequiredService<PriceQuoteLogger>());
 
         services.AddSingleton<PriceHistoryService>();
+
+        // Network-fee time-series logging + history (same pattern).
+        services.AddSingleton<NetworkFeeQuoteLogger>();
+        services.AddSingleton<INetworkFeeQuoteSink>(sp => sp.GetRequiredService<NetworkFeeQuoteLogger>());
+        services.AddHostedService(sp => sp.GetRequiredService<NetworkFeeQuoteLogger>());
+
+        services.AddSingleton<NetworkFeeHistoryService>();
 
         return services;
     }

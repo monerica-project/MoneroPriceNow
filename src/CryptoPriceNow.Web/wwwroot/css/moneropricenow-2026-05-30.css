@@ -1521,3 +1521,124 @@ tbody tr.is-sponsor {
     color: #ff9347;
     text-decoration: underline;
 }
+/* ─── Current on-chain network fee (BTC / ETH / XMR per page) ─────────────── */
+.netfee {
+    max-width: 900px;
+    margin: 0 auto 1.1rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: .8rem .9rem .85rem;
+}
+.netfee-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-bottom: .7rem;
+}
+.netfee-title {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--xmr-orange);
+}
+.netfee-live {
+    font-family: var(--mono);
+    font-size: .58rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--good);
+    border: 1px solid rgba(62,207,142,.35);
+    border-radius: 999px;
+    padding: .1rem .45rem;
+}
+.netfee-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: .55rem;
+}
+.netfee-tier {
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .55rem .6rem;
+    text-align: center;
+}
+.netfee-tier-label {
+    font-family: var(--mono);
+    font-size: .6rem;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: .25rem;
+}
+.netfee-tier-primary {
+    font-family: var(--mono);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.2;
+}
+.netfee-tier-sub {
+    font-family: var(--mono);
+    font-size: .58rem;
+    color: var(--text-muted);
+    margin-top: .3rem;
+    line-height: 1.35;
+}
+.netfee-note {
+    font-family: var(--mono);
+    font-size: .58rem;
+    color: var(--text-muted);
+    margin-top: .6rem;
+    text-align: center;
+    opacity: .85;
+}
+
+.netfee-tier-usd {
+    font-family: var(--mono);
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text);          /* neutral — a dollar figure isn't "good" or "bad" on its own */
+    margin-top: .15rem;
+    line-height: 1.2;
+}
+
+/* Right side of the header: "updated Ns ago" + the live pill. */
+.netfee-headright {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+.netfee-updated {
+    font-family: var(--mono);
+    font-size: .58rem;
+    color: var(--text-muted);
+}
+
+/* Direction arrow that persists after a change (red = fee rose, green = fee fell). */
+.netfee-dir {
+    font-size: .7rem;
+    margin-left: .3rem;
+}
+.netfee-dir.up   { color: var(--bad); }
+.netfee-dir.down { color: var(--good); }
+
+/* Brief flash when a value changes on the live update. */
+.netfee-bump-up   { animation: netfeeBumpUp 2.6s ease-out; }
+.netfee-bump-down { animation: netfeeBumpDown 2.6s ease-out; }
+@keyframes netfeeBumpUp {
+    0%   { color: var(--bad);  text-shadow: 0 0 9px rgba(255,91,91,.6); }
+    70%  { color: var(--bad); }
+    100% { text-shadow: none; }
+}
+@keyframes netfeeBumpDown {
+    0%   { color: var(--good); text-shadow: 0 0 9px rgba(62,207,142,.6); }
+    70%  { color: var(--good); }
+    100% { text-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .netfee-bump-up, .netfee-bump-down { animation: none; }
+}
