@@ -8,5 +8,6 @@
   </Folder>
   <Project Path="CryptoPriceNow.Web/CryptoPriceNow.Web.csproj" />
   <Project Path="CryptoPriceNow.Data/CryptoPriceNow.Data.csproj" />
-  <Project Path="ExchangeServices/ExchangeServices.csproj" Id="7a456775-67ac-480b-9e21-20134644e0bd" />
+  <!-- Shared exchange-services library (separate repo, cloned alongside this one). -->
+  <Project Path="../../ExchangeServices/ExchangeServices/ExchangeServices.csproj" />
 </Solution>
