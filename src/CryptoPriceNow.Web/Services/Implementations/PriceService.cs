@@ -357,18 +357,20 @@ public sealed class PriceService : IPriceService
     private static readonly IReadOnlyDictionary<string, string[]> QuoteSupport =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
-            ["bitxchange"]  = ["USDT"],
-            ["ccecash"]     = ["USDT"], // honors query.Quote in code but still emits USD for BTC/ETH — confirm before enabling
+            ["bitxchange"]  = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
+            ["ccecash"]     = ["USDT", "BTC", "ETH"], // USDT fast-path; BTC/ETH via /calculate
             ["changehero"]  = ["USDT"], // excluded entirely via PriceService:ExcludedExchanges (XMR is sell-only here)
-            ["cyphergoat"]  = ["USDT"],
-            ["quickex"]     = ["USDT"],
-            ["sageswap"]    = ["USDT"],
+            ["cyphergoat"]  = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
+            ["quickex"]     = ["USDT", "BTC", "ETH"], // instruments-resolved; two-way XMR↔BTC/ETH
+            ["sageswap"]    = ["USDT", "BTC", "ETH"], // BestChange feed has XMR↔BTC/ETH rows
             ["secureshift"] = ["USDT"],
-            ["stereoswap"]  = ["USDT"],
-            ["swapgate"]    = ["USDT"],
-            ["swapter"]     = ["USDT"],
-            ["trocador"]    = ["USDT"],
-            ["xgram"]       = ["USDT"],
+            ["stereoswap"]  = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
+            ["swapgate"]    = ["USDT", "BTC", "ETH"], // client resolves any pair via instruments; two-way XMR↔BTC/ETH
+            ["swapter"]     = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
+            ["godex"]       = ["USDT", "BTC"], // BTC two-way; ETH is sell-only on GoDex (ETH→XMR unavailable)
+            ["octoswap"]    = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
+            ["trocador"]    = ["USDT", "BTC", "ETH"], // aggregator; two-way XMR↔BTC/ETH (ETH=ERC20)
+            ["xgram"]       = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
 
             // WizardSwap has no USDT listing — it can only price crypto quotes.
             // Restrict it to BTC/ETH so it surfaces on those pages and is skipped
