@@ -37,10 +37,17 @@ public sealed class PriceService : IPriceService
         IOptions<PriceServiceOptions> options,
         IPriceQuoteSink quoteSink)
     {
-        this.priceApis = priceApis.ToList();
+        this.opt = options.Value;
+
+        // Drop exchanges that can't serve a two-way (buy + sell) XMR quote. This is
+        // a two-way price site, so a sell-only venue (e.g. ChangeHero, which can't
+        // receive/buy Monero) is excluded entirely rather than shown half-empty.
+        var excluded = new HashSet<string>(
+            this.opt.ExcludedExchanges ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        this.priceApis = priceApis.Where(a => !excluded.Contains(a.ExchangeKey)).ToList();
+
         this.currencyApis = currencyApis.ToList();
         this.cache = cache;
-        this.opt = options.Value;
         this.quoteSink = quoteSink;
 
         this.rateTypes = this.priceApis.ToDictionary(
@@ -352,7 +359,7 @@ public sealed class PriceService : IPriceService
         {
             ["bitxchange"]  = ["USDT"],
             ["ccecash"]     = ["USDT"], // honors query.Quote in code but still emits USD for BTC/ETH — confirm before enabling
-            ["changehero"]  = ["USDT"],
+            ["changehero"]  = ["USDT"], // excluded entirely via PriceService:ExcludedExchanges (XMR is sell-only here)
             ["cyphergoat"]  = ["USDT"],
             ["quickex"]     = ["USDT"],
             ["sageswap"]    = ["USDT"],
