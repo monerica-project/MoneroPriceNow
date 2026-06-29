@@ -366,7 +366,6 @@ public sealed class PriceService : IPriceService
             ["secureshift"] = ["USDT"],
             ["stereoswap"]  = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
             ["swapgate"]    = ["USDT", "BTC", "ETH"], // client resolves any pair via instruments; two-way XMR↔BTC/ETH
-            ["swapter"]     = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
             ["godex"]       = ["USDT", "BTC"], // BTC two-way; ETH is sell-only on GoDex (ETH→XMR unavailable)
             ["octoswap"]    = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
             ["trocador"]    = ["USDT", "BTC", "ETH"], // aggregator; two-way XMR↔BTC/ETH (ETH=ERC20)
