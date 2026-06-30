@@ -1,0 +1,83 @@
+@page
+@model NetworkModel
+@{
+    ViewData["Title"] = "The Monerica Network — MoneroPriceNow";
+}
+
+<style>
+    .mpn-page {
+        max-width: 760px;
+        margin: 2.5rem auto 4rem;
+        padding: 0 1.25rem;
+        font-family: var(--sans);
+        color: var(--text);
+    }
+    .mpn-page h1 {
+        font-family: var(--mono);
+        font-size: 1.6rem;
+        letter-spacing: -.01em;
+        margin-bottom: 1.25rem;
+        color: var(--text);
+    }
+    .mpn-page h2 {
+        font-family: var(--mono);
+        font-size: 1.05rem;
+        margin: 2rem 0 .65rem;
+        color: var(--xmr-orange2);
+    }
+    .mpn-page p { line-height: 1.7; margin-bottom: 1rem; color: var(--text); }
+    .mpn-page a {
+        color: var(--xmr-orange2);
+        text-decoration: none;
+        border-bottom: 1px solid rgba(242,104,34,.35);
+    }
+    .mpn-page a:hover { border-bottom-color: var(--xmr-orange2); }
+    .mpn-card {
+        background: var(--surface, #161109);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+        margin: .9rem 0;
+    }
+    .mpn-card h3 { margin: 0 0 .3rem; font-family: var(--mono); font-size: 1.02rem; }
+    .mpn-card h3 a { border-bottom: none; }
+    .mpn-muted { color: var(--text-muted); font-size: .92rem; margin: 0; }
+</style>
+
+<div class="mpn-page">
+    <h1>The Monerica Network</h1>
+    <p>
+        MoneroPriceNow is part of the <strong>Monerica network</strong> — a family of independent,
+        privacy-respecting projects for the Monero community. Each site references the others, so you can
+        always find your way around.
+    </p>
+
+    <h2>Sites in the network</h2>
+
+    <div class="mpn-card">
+        <h3><a href="https://monerica.com" rel="noopener">Monerica.com</a></h3>
+        <p class="mpn-muted">The Monero circular-economy directory: merchants and services that accept XMR.</p>
+    </div>
+    <div class="mpn-card">
+        <h3><a href="https://moneroacademy.com" rel="noopener">MoneroAcademy.com</a></h3>
+        <p class="mpn-muted">Free Monero education: courses, lessons and quizzes from beginner to advanced.</p>
+    </div>
+    <div class="mpn-card">
+        <h3>MoneroPriceNow.com <span class="mpn-muted">— you are here</span></h3>
+        <p class="mpn-muted">The live Monero (XMR) price, clean and tracker-free.</p>
+    </div>
+    <div class="mpn-card">
+        <h3><a href="https://moneromarketcap.com" rel="noopener">MoneroMarketCap.com</a></h3>
+        <p class="mpn-muted">Monero market data, supply and statistics.</p>
+    </div>
+    <div class="mpn-card">
+        <h3><a href="https://moneroshamelist.com" rel="noopener">MoneroShameList.com</a></h3>
+        <p class="mpn-muted">A watchlist of privacy-focused companies that don't yet accept Monero.</p>
+    </div>
+
+    <h2>Follow the project</h2>
+    <p>
+        <a href="https://www.youtube.com/@@monericaproject" rel="noopener" target="_blank">Monerica Project on YouTube</a><br />
+        <a href="https://x.com/MonericaProject" rel="noopener" target="_blank">Monerica Project on X (Twitter)</a>
+    </p>
+</div>
