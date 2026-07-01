@@ -160,6 +160,49 @@ if [[ -n "$TOR_KEYS_DIR" ]]; then
     fi
 fi
 
+# ---- Maintenance splash ----------------------------------------------------
+# Static page nginx serves (via error_page) whenever the backend is unreachable,
+# e.g. the brief window while the systemd service restarts during this deploy.
+step "Installing maintenance page"
+MAINT_DIR="/var/www/$APP_NAME-maintenance"
+MAINT_FILE="$TMP/maintenance.html"
+cat > "$MAINT_FILE" <<'HTML'
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="refresh" content="10" />
+<title>Updating — Monero Price Now</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:#0f0f11; color:#ededee; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; text-align:center; }
+  .box { max-width:480px; padding:2rem 1.5rem; }
+  h1 { font-size:1.6rem; margin:0 0 .6rem; }
+  p { color:#9a9aa1; line-height:1.5; margin:.4rem 0; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:#f26822;
+    margin:0 3px; animation:b 1s infinite alternate; }
+  .dot:nth-child(2){animation-delay:.2s} .dot:nth-child(3){animation-delay:.4s}
+  @keyframes b { from{opacity:.3;transform:translateY(0)} to{opacity:1;transform:translateY(-4px)} }
+  .brand { color:#f26822; font-weight:700; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1><span class="brand">Monero Price Now</span> is updating</h1>
+    <p>We're deploying a quick update. This page refreshes automatically.</p>
+    <p><span class="dot"></span><span class="dot"></span><span class="dot"></span></p>
+    <p>Back in a few seconds.</p>
+  </div>
+</body>
+</html>
+HTML
+ssh "$VPS" "sudo mkdir -p $MAINT_DIR"
+scp "$MAINT_FILE" "$VPS:/tmp/maintenance.html"
+ssh "$VPS" "sudo mv /tmp/maintenance.html $MAINT_DIR/maintenance.html && sudo chmod 644 $MAINT_DIR/maintenance.html"
+ok "Maintenance page installed at $MAINT_DIR"
+
 # ---- Nginx config ----------------------------------------------------------
 step "Installing nginx config for $DOMAIN"
 NGINX_FILE="$TMP/$APP_NAME.conf"
@@ -191,6 +234,10 @@ $SERVER_NAME_LINE
 
     location / {
 $ONION_HEADER
+        # When the app is down (e.g. during a deploy restart) serve a friendly
+        # "updating" page instead of a raw 502/503/504.
+        error_page 502 503 504 = @maintenance;
+        proxy_intercept_errors on;
         proxy_pass         http://127.0.0.1:$APP_PORT;
         proxy_http_version 1.1;
         proxy_set_header   Upgrade           \$http_upgrade;
@@ -202,6 +249,14 @@ $ONION_HEADER
         proxy_set_header   X-Real-IP         \$remote_addr;
         proxy_read_timeout 120s;
         proxy_send_timeout 120s;
+    }
+
+    # Maintenance splash shown by error_page above while the backend is restarting.
+    location @maintenance {
+        root /var/www/$APP_NAME-maintenance;
+        rewrite ^.*\$ /maintenance.html break;
+        add_header Retry-After 15 always;
+        add_header Cache-Control "no-store" always;
     }
 
     server_tokens off;

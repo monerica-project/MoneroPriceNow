@@ -98,3 +98,4 @@ CI/deploy-config-windows.sh
 CI/deploy-config.sh
 publish/web-windows/appsettings.json
 publish/
+src/CryptoPriceNow.Web/appsettings.Production.json
