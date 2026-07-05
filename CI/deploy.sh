@@ -307,6 +307,38 @@ if (( ! SKIP_SSL )); then
     fi
 fi
 
+# ---- Force www -> apex (301) ----------------------------------------------
+# certbot's --redirect only upgrades http->https and PRESERVES the host, so
+# www.$DOMAIN would keep serving the app. Insert a www->apex 301 as the first
+# statement of every server block (runs before certbot's redirect and covers the
+# 443 block), so www never serves the site — it only redirects to the apex host.
+if [[ "$DOTS" == "1" ]] && (( HAS_TLS )); then
+    step "Forcing www.$DOMAIN -> $DOMAIN (301)"
+    ssh "$VPS" "sudo python3 - '$APP_NAME' '$DOMAIN'" <<'PYEOF'
+import sys, re
+app, domain = sys.argv[1], sys.argv[2]
+path = "/etc/nginx/sites-available/%s.conf" % app
+lines = open(path).read().splitlines()
+want = 'if ($host = www.%s) { return 301 https://%s$request_uri; }' % (domain, domain)
+srv = re.compile(r'^\s*server\s*\{')
+sn = re.compile(r'^\s*server_name\s+%s\s+www\.%s\s*;\s*$' % (re.escape(domain), re.escape(domain)))
+depth = 0; cur = None; blocks = []
+for i, l in enumerate(lines):
+    if depth == 0 and srv.match(l): cur = {'open': i, 'ok': False}
+    if cur and sn.match(l): cur['ok'] = True
+    d0 = depth; depth += l.count('{') - l.count('}')
+    if cur and d0 > 0 and depth == 0: cur['close'] = i; blocks.append(cur); cur = None
+ins = []
+for b in blocks:
+    if b['ok'] and want not in "\n".join(lines[b['open']:b['close'] + 1]):
+        ins.append((b['open'] + 1, "    " + want))
+for idx, t in sorted(ins, reverse=True): lines.insert(idx, t)
+if ins: open(path, "w").write("\n".join(lines) + "\n")
+print("www-redirect: inserted %d block(s)" % len(ins))
+PYEOF
+    ssh "$VPS" "sudo nginx -t && sudo systemctl reload nginx" && ok "www -> apex enforced"
+fi
+
 # ---- Smoke test ------------------------------------------------------------
 PROTO="http://"
 (( HAS_TLS )) && PROTO="https://"
