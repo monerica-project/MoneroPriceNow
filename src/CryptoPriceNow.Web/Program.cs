@@ -137,11 +137,16 @@ app.MapGet("/api/history", async (
     HttpContext http,
     string? pair,
     string? range,
+    string? rateType,
     CancellationToken ct) =>
 {
     var history = http.RequestServices.GetService<PriceHistoryService>();
     if (history is null)
         return Results.Ok(new { enabled = false, points = Array.Empty<object>() });
+
+    // Optional rate-type filter: "float" or "fixed". Anything else = all types (legacy chart).
+    var rt = rateType?.Trim().ToLowerInvariant();
+    if (rt is not ("float" or "fixed")) rt = null;
 
     // Only allow pairs the warmer actually tracks — prevents arbitrary-string
     // queries against the table. The allow-list is the catalog itself, so any
@@ -157,7 +162,7 @@ app.MapGet("/api/history", async (
 
     try
     {
-        var result = await history.GetHistoryAsync(trackedPair.HistoryPair, range, ct);
+        var result = await history.GetHistoryAsync(trackedPair.HistoryPair, range, rt, ct);
 
         // Which range presets have enough history behind them to be worth showing?
         // A range is available once data spans at least that far back. The shortest
@@ -175,6 +180,7 @@ app.MapGet("/api/history", async (
             enabled = true,
             pair = result.Pair,
             range = result.RangeKey,
+            rateType = rt ?? "all",
             bucketSeconds = result.BucketSeconds,
             oldestMs = result.OldestUtc?.ToUnixTimeMilliseconds(),
             availableRanges = available,

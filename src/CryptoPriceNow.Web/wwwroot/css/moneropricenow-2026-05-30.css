@@ -57,12 +57,12 @@
 :root {
     --xmr-orange: #F26822;
     --xmr-orange2: #ff8c3a;
-    --xmr-dark: #0d0a07;
-    --surface: #161109;
-    --surface2: #1e1710;
-    --border: rgba(242,104,34,.18);
-    --text: #e8dfd0;
-    --text-muted: #8a7a6a;
+    --xmr-dark: #08080a;
+    --surface: #121317;
+    --surface2: #16171c;
+    --border: rgba(242,104,34,.20);
+    --text: #ece9e4;
+    --text-muted: #8b8b96;
     --mono: 'IBM Plex Mono', ui-monospace, monospace;
     --sans: 'Barlow', system-ui, sans-serif;
 }
@@ -89,7 +89,11 @@ html, body {
     margin: 0;
     padding: 0;
     background-color: var(--xmr-dark);
-    background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(242,104,34,.10) 0%, transparent 70%), repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(242,104,34,.022) 39px, rgba(242,104,34,.022) 40px), repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(242,104,34,.022) 39px, rgba(242,104,34,.022) 40px);
+    background-image:
+        radial-gradient(ellipse 60% 38% at 50% -12%, rgba(255,125,45,.08) 0%, transparent 66%),
+        repeating-linear-gradient(0deg, transparent, transparent 43px, rgba(242,104,34,.015) 43px, rgba(242,104,34,.015) 44px),
+        repeating-linear-gradient(90deg, transparent, transparent 43px, rgba(242,104,34,.015) 43px, rgba(242,104,34,.015) 44px);
+    background-attachment: fixed;
     color: var(--text);
     font-family: var(--sans);
     min-height: 100vh;
@@ -97,7 +101,7 @@ html, body {
 
 /* ── Sponsor bar ── */
 .sponsor-bar {
-    background: rgba(242,104,34,.07);
+    background: rgba(255,255,255,.025);
     border-bottom: 1px solid var(--border);
     text-align: center;
     padding: .35rem 1rem;
@@ -119,7 +123,7 @@ html, body {
 
 /* ── Shared nav ── */
 .site-nav {
-    background: rgba(13,10,7,.85);
+    background: rgba(10,11,13,.88);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
     position: sticky;
@@ -203,12 +207,12 @@ html, body {
 :root {
     --xmr-orange: #F26822;
     --xmr-orange2: #ff8c3a;
-    --surface2: #1a1108;
-    --surface3: #241808;
-    --border: rgba(242,104,34,.16);
-    --border-hi: rgba(242,104,34,.38);
-    --text: #ddd4c4;
-    --text-muted: #7a6a5a;
+    --surface2: #16171c;
+    --surface3: #1e2028;
+    --border: rgba(242,104,34,.18);
+    --border-hi: rgba(242,104,34,.40);
+    --text: #ece9e4;
+    --text-muted: #8b8b96;
     --good: #3ecf8e;
     --bad: #ff5b5b;
     --mono: 'IBM Plex Mono', ui-monospace, monospace;
@@ -368,7 +372,7 @@ html, body {
     font-size: .56rem;
     letter-spacing: .1em;
     text-transform: uppercase;
-    background: rgba(242,104,34,.1);
+    background: rgba(255,255,255,.05);
     border: 1px solid rgba(242,104,34,.25);
     color: var(--xmr-orange2);
     border-radius: 4px;
@@ -608,7 +612,7 @@ tbody tr {
     }
 
     tbody tr:hover {
-        background: rgba(242,104,34,.04);
+        background: rgba(255,255,255,.02);
     }
 
 td {
@@ -764,7 +768,7 @@ span.ex-name {
 }
 
 .privacy-D {
-    background: rgba(255,140,58,.12);
+    background: rgba(255,255,255,.055);
     color: var(--xmr-orange2);
     border: 1px solid rgba(255,140,58,.25);
 }
@@ -792,11 +796,11 @@ td[data-col="spread"] {
 /* â”€â”€â”€ Sponsor row highlight â”€â”€â”€ */
 tbody tr.is-sponsor {
     box-shadow: inset 0 0 0 1px rgba(242,104,34,.55), inset 0 0 12px rgba(242,104,34,.06);
-    background: rgba(242,104,34,.04);
+    background: rgba(255,255,255,.02);
 }
 
     tbody tr.is-sponsor:hover {
-        background: rgba(242,104,34,.08);
+        background: rgba(255,255,255,.045);
     }
 
     tbody tr.is-sponsor td:first-child {
@@ -1265,11 +1269,11 @@ tbody tr.is-sponsor {
 
     tbody tr.is-sponsor {
         box-shadow: inset 0 0 0 1px rgba(242,104,34,.7), inset 0 0 16px rgba(242,104,34,.1);
-        background: rgba(242,104,34,.07);
+        background: rgba(255,255,255,.035);
     }
 
         tbody tr.is-sponsor:hover {
-            background: rgba(242,104,34,.12);
+            background: rgba(255,255,255,.055);
         }
 }
 
@@ -1417,7 +1421,7 @@ tbody tr.is-sponsor {
     justify-content: center;
     flex-wrap: wrap;
     gap: .4rem 2.5rem;
-    background: rgba(242,104,34,.07);
+    background: rgba(255,255,255,.035);
     border-bottom: 1px solid var(--border);
     padding: .4rem 1rem;
     font-family: var(--mono);

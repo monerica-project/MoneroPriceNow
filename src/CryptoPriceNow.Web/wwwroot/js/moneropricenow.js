@@ -230,7 +230,12 @@
 
         if (!sponsorData.length) { sponsorBarTrack.innerHTML = ''; return; }
 
-        bannerPages = chunkArr(sponsorData, bannerSlots());
+        // Main sponsors get their OWN banner pages first, so the FIRST cycle shown is always
+        // main sponsors only — never padded out with category/subcategory tiers.
+        const slots = bannerSlots();
+        const mains = sponsorData.filter(s => s.sponsorshipType === 'MainSponsor');
+        const rest = sponsorData.filter(s => s.sponsorshipType !== 'MainSponsor');
+        bannerPages = chunkArr(mains, slots).concat(chunkArr(rest, slots));
         renderBannerPage(0);   // first set fades + staggers in via CSS
 
         if (bannerPages.length <= 1) return;   // only one set, nothing to rotate
@@ -679,8 +684,11 @@
                 encodeURIComponent(PAIR.base) + '&quote=' +
                 encodeURIComponent(PAIR.apiQuote), { cache: 'no-store' });
             if (!res.ok) throw new Error('HTTP ' + res.status);
-            const data = await res.json();
-            if (!Array.isArray(data)) throw new Error('Bad JSON');
+            const raw = await res.json();
+            if (!Array.isArray(raw)) throw new Error('Bad JSON');
+            // Show only exchanges matching the selected rate type (Float by default).
+            const rateType = window.__RATE_TYPE__ || 'float';
+            const data = raw.filter(r => (r.rateType || 'float') === rateType);
             if (!data.length) {
                 heroMidEl.textContent = '--';
                 heroMidSub.textContent = 'No data';
@@ -709,6 +717,21 @@
             lastEl.textContent = 'Update failed (retrying\u2026)';
         }
     }
+
+    // -- Rate-type toggle (Float default / Fixed) ----------------------------
+    // Filters the table to the chosen rate type and tells the chart to match.
+    window.__RATE_TYPE__ = window.__RATE_TYPE__ || 'float';
+    document.querySelectorAll('.rate-toggle [data-rate]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const rt = btn.dataset.rate;
+            if (btn.disabled || !rt || rt === window.__RATE_TYPE__) return;
+            window.__RATE_TYPE__ = rt;
+            document.querySelectorAll('.rate-toggle [data-rate]').forEach(b =>
+                b.classList.toggle('chart-range-active', b === btn));
+            refresh();
+            window.dispatchEvent(new CustomEvent('ratetypechange', { detail: rt }));
+        });
+    });
 
     // -- Sort header click handler -------------------------------------------
     document.querySelectorAll('.th-sort').forEach(th => {

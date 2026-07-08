@@ -72,13 +72,22 @@ public sealed class PriceService : IPriceService
         // any page load during this window returns stale-but-valid data instantly.
         foreach (var api in priceApis)
         {
-            cache.Remove($"sell:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}");
             cache.Remove($"price:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}");
-            if (api is IExchangeBuyPriceApi)
-                cache.Remove($"buy:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}");
+            foreach (var mode in new[] { "flt", "fix" })
+            {
+                cache.Remove($"sell:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}:{mode}");
+                if (api is IExchangeBuyPriceApi)
+                    cache.Remove($"buy:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}:{mode}");
+            }
         }
 
-        var rows = await FetchLiveAsync(baseRef, quoteRef, ct);
+        // Fetch float (all exchanges) + fixed (fixed-capable only) and combine, so the board can
+        // toggle between them. Drop fixed rows that came back empty (the exchange didn't offer a
+        // fixed rate for this pair) so the Fixed view lists only exchanges that actually quote fixed.
+        var floatRows = await FetchLiveAsync(baseRef, quoteRef, fixedRate: false, ct);
+        var fixedRows = (await FetchLiveAsync(baseRef, quoteRef, fixedRate: true, ct))
+            .Where(r => r.Buy is not null || r.Sell is not null);
+        var rows = floatRows.Concat(fixedRows).ToList();
         latestRows[PairKey(baseRef, quoteRef)] = rows;
 
         // Hand the snapshot to the quote logger. EnqueueAsync only writes to an
@@ -116,25 +125,44 @@ public sealed class PriceService : IPriceService
         if (latestRows.TryGetValue(PairKey(baseRef, quoteRef), out var cached))
             return Task.FromResult(cached);
 
-        // Cold start only (first request before warmer has finished its first run)
-        return FetchLiveAsync(baseRef, quoteRef, ct);
+        // Cold start only (first request before warmer has finished its first run) — float only;
+        // the fixed rows appear once the warmer has run its dual-pass.
+        return FetchLiveAsync(baseRef, quoteRef, fixedRate: false, ct);
     }
 
     // ── Live fetch (calls exchange APIs in parallel, respects per-exchange TTL) 
+    // Exchanges whose ExchangeServices client honours PriceQuery.Fixed (returns a genuine
+    // fixed-rate quote). Only these are queried for the Fixed view — the rest would just echo
+    // their float rate, which would be wrong to label "fixed".
+    private static readonly HashSet<string> FixedCapableKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "changenow", "fixedfloat", "exolix", "stealthex", "simpleswap", "trocador", "letsexchange",
+        "0trace", "swapuz", "changee", "swapgate", "bitania", "quickex", "pegasusswap",
+    };
+
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
     private async Task<IReadOnlyList<TwoWayPriceRow>> FetchLiveAsync(
-        AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
+        AssetRef baseRef, AssetRef quoteRef, bool fixedRate, CancellationToken ct)
     {
-        var tasks = priceApis.Select(async api =>
+        // Float pass = every exchange; Fixed pass = only the fixed-capable ones.
+        var apis = fixedRate
+            ? priceApis.Where(a => FixedCapableKeys.Contains(a.ExchangeKey))
+            : (IEnumerable<IExchangePriceApi>)priceApis;
+
+        var tasks = apis.Select(async api =>
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(ExchangeTimeout);
 
+            var rateType = fixedRate
+                ? RateTypes.Fixed
+                : (rateTypes.TryGetValue(api.ExchangeKey, out var rt) ? rt : RateTypes.Float);
+
             try
             {
-                var sellRes = await GetOneExchangeSellAsync(api, baseRef, quoteRef, cts.Token);
+                var sellRes = await GetOneExchangeSellAsync(api, baseRef, quoteRef, fixedRate, cts.Token);
                 var buyRes = api is IExchangeBuyPriceApi buyApi
-                    ? await GetOneExchangeBuyAsync(api.ExchangeKey, buyApi, baseRef, quoteRef, cts.Token)
+                    ? await GetOneExchangeBuyAsync(api.ExchangeKey, buyApi, baseRef, quoteRef, fixedRate, cts.Token)
                     : null;
 
                 var ts = sellRes?.TimestampUtc;
@@ -151,7 +179,8 @@ public sealed class PriceService : IPriceService
                     PrivacyLevel: (api as IPrivacyLevel)?.PrivacyLevel,
                     MinAmountUsd: sellRes?.MinAmountUsd
                                   ?? buyRes?.MinAmountUsd
-                                  ?? (api as IMinAmountUsd)?.MinAmountUsd
+                                  ?? (api as IMinAmountUsd)?.MinAmountUsd,
+                    RateType: rateType
                 );
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -162,7 +191,8 @@ public sealed class PriceService : IPriceService
                     SiteUrl: api.SiteUrl,
                     Sell: null, Buy: null, TsUtc: null,
                     PrivacyLevel: (api as IPrivacyLevel)?.PrivacyLevel,
-                    MinAmountUsd: (api as IMinAmountUsd)?.MinAmountUsd
+                    MinAmountUsd: (api as IMinAmountUsd)?.MinAmountUsd,
+                    RateType: rateType
                 );
             }
         });
@@ -217,7 +247,7 @@ public sealed class PriceService : IPriceService
             SiteName: r.SiteName,
             SiteUrl: r.SiteUrl,
             PrivacyLevel: r.PrivacyLevel,
-            RateType: rateTypes.TryGetValue(r.Exchange, out var rt) ? rt : RateTypes.Float,
+            RateType: r.RateType,
             Buy: r.Buy,
             Sell: r.Sell,
             QuoteTsUtc: r.TsUtc
@@ -240,29 +270,31 @@ public sealed class PriceService : IPriceService
     // only calls the actual API when a per-exchange TTL expires.
 
     private Task<PriceResult?> GetOneExchangeSellAsync(
-        IExchangePriceApi api, AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
+        IExchangePriceApi api, AssetRef baseRef, AssetRef quoteRef, bool fixedRate, CancellationToken ct)
     {
         if (!QuoteSupported(api.ExchangeKey, quoteRef)) return Task.FromResult<PriceResult?>(null);
-        var key = $"sell:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}";
+        var mode = fixedRate ? "fix" : "flt";
+        var key = $"sell:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}:{mode}";
         var ttl = TimeSpan.FromSeconds(Math.Clamp(opt.PriceCacheSeconds, 1, 300));
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
         {
             var (rb, rq) = await ResolveExchangeIdsAsync(api.ExchangeKey, baseRef, quoteRef, ct);
-            return await api.GetSellPriceAsync(new PriceQuery(rb, rq), ct);
+            return await api.GetSellPriceAsync(new PriceQuery(rb, rq, Fixed: fixedRate), ct);
         });
     }
 
     private Task<PriceResult?> GetOneExchangeBuyAsync(
         string exchangeKey, IExchangeBuyPriceApi api,
-        AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
+        AssetRef baseRef, AssetRef quoteRef, bool fixedRate, CancellationToken ct)
     {
         if (!QuoteSupported(exchangeKey, quoteRef)) return Task.FromResult<PriceResult?>(null);
-        var key = $"buy:{exchangeKey}:{baseRef.Key}->{quoteRef.Key}";
+        var mode = fixedRate ? "fix" : "flt";
+        var key = $"buy:{exchangeKey}:{baseRef.Key}->{quoteRef.Key}:{mode}";
         var ttl = TimeSpan.FromSeconds(Math.Clamp(opt.PriceCacheSeconds, 1, 300));
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
         {
             var (rb, rq) = await ResolveExchangeIdsAsync(exchangeKey, baseRef, quoteRef, ct);
-            return await api.GetBuyPriceAsync(new PriceQuery(rb, rq, ProbeForQuote(rq)), ct);
+            return await api.GetBuyPriceAsync(new PriceQuery(rb, rq, ProbeForQuote(rq), Fixed: fixedRate), ct);
         });
     }
 

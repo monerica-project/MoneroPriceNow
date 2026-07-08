@@ -124,6 +124,25 @@
     <div class="conv-note" id="convNote">Based on current market price</div>
 </div>
 
+<!-- Rate type toggle. Float is live; Fixed is disabled until fixed-rate sources are wired in. -->
+<style>
+    .rate-type-bar { max-width:560px; margin:.2rem auto 1.1rem; padding:.75rem .9rem; text-align:center;
+        border:1px solid rgba(255,255,255,.12); border-radius:12px; background:rgba(255,255,255,.03); }
+    .rate-toggle { display:inline-flex; gap:.4rem; margin-bottom:.5rem; }
+    .rate-type-note { margin:0; font-size:.82rem; line-height:1.45; color:var(--text-muted); }
+    .rate-toggle button[disabled] { opacity:.45; cursor:not-allowed; }
+</style>
+<div class="rate-type-bar">
+    <div class="rate-toggle" role="group" aria-label="Rate type">
+        <button type="button" class="chart-range-btn chart-range-active" data-rate="float">Float</button>
+        <button type="button" class="chart-range-btn" data-rate="fixed">Fixed</button>
+    </div>
+    <p class="rate-type-note">
+        <strong>Float</strong> (default) rates can shift slightly between the quote and settlement — how most
+        instant swaps work. Switch to <strong>Fixed</strong> to see exchanges that lock the rate the moment the swap starts.
+    </p>
+</div>
+
 <!-- Price table -->
 <div class="table-wrap">
     <table>

@@ -199,7 +199,8 @@
     // ── Data loading ──────────────────────────────────────────────────────────
     async function load() {
         try {
-            const url = `/api/history?pair=${encodeURIComponent(PAIR)}&range=${encodeURIComponent(currentRange)}`;
+            const rt = window.__RATE_TYPE__ || 'float';
+            const url = `/api/history?pair=${encodeURIComponent(PAIR)}&range=${encodeURIComponent(currentRange)}&rateType=${encodeURIComponent(rt)}`;
             const res = await fetch(url, { cache: 'no-store' });
             if (!res.ok) return;
             const data = await res.json();
@@ -223,6 +224,9 @@
             if (document.visibilityState === 'visible') load();
         }, REFRESH_MS);
     }
+
+    // ── Rate-type toggle (fired by the board's Float/Fixed buttons) ────────────
+    window.addEventListener('ratetypechange', () => load());
 
     // ── Range buttons ─────────────────────────────────────────────────────────
     if (rangesEl) {

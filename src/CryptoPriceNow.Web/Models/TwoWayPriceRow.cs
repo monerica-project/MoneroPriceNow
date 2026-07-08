@@ -8,6 +8,6 @@ public sealed record TwoWayPriceRow(
     decimal? Buy,
     DateTimeOffset? TsUtc,
     char? PrivacyLevel,
-    decimal? MinAmountUsd
-
+    decimal? MinAmountUsd,
+    string RateType = "float"   // "float" (default) or "fixed" — this exchange's quoting mode
 );

@@ -46,31 +46,37 @@ public sealed class PriceHistoryService
     }
 
     public async Task<HistoryResult> GetHistoryAsync(
-        string pair, string? rangeKey, CancellationToken ct = default)
+        string pair, string? rangeKey, string? rateType = null, CancellationToken ct = default)
     {
         TryGetPreset(rangeKey, out var preset);
         var fromUtc = DateTimeOffset.UtcNow - preset.Range;
+
+        // Optional rate-type filter ("float" | "fixed"). Null/empty = all rate types (legacy
+        // behaviour). The clause is a constant string; the value is passed as a parameter.
+        var rateFilter = string.IsNullOrEmpty(rateType) ? string.Empty : " AND \"RateType\" = @rateType";
 
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         await db.Database.OpenConnectionAsync(ct);
         var conn = (NpgsqlConnection)db.Database.GetDbConnection();
 
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        cmd.CommandText = $"""
             SELECT date_bin(@bucket, "TimestampUtc", TIMESTAMPTZ '2000-01-03') AS bucket,
                    AVG("Buy")   AS avg_buy,
                    AVG("Sell")  AS avg_sell,
                    COUNT(*)::int AS samples,
-                   (SELECT MIN("TimestampUtc") FROM "PriceQuotes" WHERE "Pair" = @pair) AS oldest
+                   (SELECT MIN("TimestampUtc") FROM "PriceQuotes" WHERE "Pair" = @pair{rateFilter}) AS oldest
             FROM "PriceQuotes"
             WHERE "Pair" = @pair
-              AND "TimestampUtc" >= @from
+              AND "TimestampUtc" >= @from{rateFilter}
             GROUP BY 1
             ORDER BY 1;
             """;
         cmd.Parameters.AddWithValue("bucket", preset.Bucket);
         cmd.Parameters.AddWithValue("pair", pair);
         cmd.Parameters.AddWithValue("from", fromUtc);
+        if (!string.IsNullOrEmpty(rateType))
+            cmd.Parameters.AddWithValue("rateType", rateType);
 
         var points = new List<HistoryPoint>();
         DateTimeOffset? oldest = null;
@@ -108,8 +114,10 @@ public sealed class PriceHistoryService
         if (oldest is null)
         {
             await using var minCmd = conn.CreateCommand();
-            minCmd.CommandText = "SELECT MIN(\"TimestampUtc\") FROM \"PriceQuotes\" WHERE \"Pair\" = @pair;";
+            minCmd.CommandText = $"SELECT MIN(\"TimestampUtc\") FROM \"PriceQuotes\" WHERE \"Pair\" = @pair{rateFilter};";
             minCmd.Parameters.AddWithValue("pair", pair);
+            if (!string.IsNullOrEmpty(rateType))
+                minCmd.Parameters.AddWithValue("rateType", rateType);
             var raw = await minCmd.ExecuteScalarAsync(ct);
             if (raw is DateTime dt)
                 oldest = new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc));
