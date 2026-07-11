@@ -196,14 +196,26 @@
         });
     }
 
+    // ── Loading overlay ───────────────────────────────────────────────────────
+    // Only shown for user-initiated changes (range / rate toggle), never for the
+    // silent 30s auto-refresh, so the chart doesn't flicker a spinner on its own.
+    const loadingEl = document.getElementById('chartLoading');
+    let loadSeq = 0;
+    function setLoading(on) { if (loadingEl) loadingEl.hidden = !on; }
+
     // ── Data loading ──────────────────────────────────────────────────────────
-    async function load() {
+    async function load(showSpinner = false) {
+        const seq = ++loadSeq;
+        if (showSpinner) setLoading(true);
         try {
             const rt = window.__RATE_TYPE__ || 'float';
             const url = `/api/history?pair=${encodeURIComponent(PAIR)}&range=${encodeURIComponent(currentRange)}&rateType=${encodeURIComponent(rt)}`;
             const res = await fetch(url, { cache: 'no-store' });
             if (!res.ok) return;
             const data = await res.json();
+
+            // A newer request started while this was in flight — drop this stale one.
+            if (seq !== loadSeq) return;
 
             if (!data.enabled) {
                 // No database configured / temporarily down — keep section hidden
@@ -215,6 +227,9 @@
             render(data);
         } catch (e) {
             console.warn('[PriceChart] history fetch failed:', e);
+        } finally {
+            // Only the most recent load clears the overlay.
+            if (seq === loadSeq) setLoading(false);
         }
     }
 
@@ -226,7 +241,7 @@
     }
 
     // ── Rate-type toggle (fired by the board's Float/Fixed buttons) ────────────
-    window.addEventListener('ratetypechange', () => load());
+    window.addEventListener('ratetypechange', () => load(true));
 
     // ── Range buttons ─────────────────────────────────────────────────────────
     if (rangesEl) {
@@ -236,7 +251,7 @@
             currentRange = btn.dataset.range;
             rangesEl.querySelectorAll('.chart-range-btn')
                 .forEach(b => b.classList.toggle('chart-range-active', b === btn));
-            load();
+            load(true);
             schedule(); // reset the 30s cadence on manual range change
         });
     }

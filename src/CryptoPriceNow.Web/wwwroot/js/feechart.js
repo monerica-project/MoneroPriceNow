@@ -167,12 +167,22 @@
         chart.$native = native;
     }
 
-    async function load() {
+    // Loading overlay — shown only for user-initiated range changes, never the
+    // silent auto-refresh. Fee history is small so it's rarely visible, but it
+    // keeps behaviour identical to the price chart.
+    const loadingEl = document.getElementById('feeChartLoading');
+    let loadSeq = 0;
+    function setLoading(on) { if (loadingEl) loadingEl.hidden = !on; }
+
+    async function load(showSpinner = false) {
+        const seq = ++loadSeq;
+        if (showSpinner) setLoading(true);
         try {
             const url = `/api/fee-history?network=${encodeURIComponent(NETWORK)}&range=${encodeURIComponent(currentRange)}`;
             const res = await fetch(url, { cache: 'no-store' });
             if (!res.ok) return;
             const data = await res.json();
+            if (seq !== loadSeq) return; // a newer request superseded this one
             if (!data.enabled) { if (!everHadData) section.hidden = true; return; }
             // Capture native unit from the first point that has one (for tooltips).
             const withNative = (data.points || []).find(p => p.native != null);
@@ -181,6 +191,8 @@
             render(data);
         } catch (e) {
             console.warn('[FeeChart] history fetch failed:', e);
+        } finally {
+            if (seq === loadSeq) setLoading(false);
         }
     }
 
@@ -196,7 +208,7 @@
             currentRange = btn.dataset.range;
             rangesEl.querySelectorAll('.chart-range-btn')
                 .forEach(b => b.classList.toggle('chart-range-active', b === btn));
-            load();
+            load(true);
             schedule();
         });
     }

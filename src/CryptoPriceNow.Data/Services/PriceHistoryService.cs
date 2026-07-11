@@ -59,16 +59,22 @@ public sealed class PriceHistoryService
         await db.Database.OpenConnectionAsync(ct);
         var conn = (NpgsqlConnection)db.Database.GetDbConnection();
 
+        // Reads from the pre-aggregated 1-minute PriceBuckets rollup, re-bucketing to the
+        // preset size. Sums + separate buy/sell counts give exact weighted averages, and
+        // the rollup is tiny (a 30-day window is a few thousand rows, not millions), so
+        // even the widest range returns in milliseconds.
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT date_bin(@bucket, "TimestampUtc", TIMESTAMPTZ '2000-01-03') AS bucket,
-                   AVG("Buy")   AS avg_buy,
-                   AVG("Sell")  AS avg_sell,
-                   COUNT(*)::int AS samples,
-                   (SELECT MIN("TimestampUtc") FROM "PriceQuotes" WHERE "Pair" = @pair{rateFilter}) AS oldest
-            FROM "PriceQuotes"
+            SELECT date_bin(@bucket, "Bucket", TIMESTAMPTZ '2000-01-03') AS bucket,
+                   SUM("SumBuy")    AS sum_buy,
+                   SUM("BuyCount")  AS buy_count,
+                   SUM("SumSell")   AS sum_sell,
+                   SUM("SellCount") AS sell_count,
+                   SUM("Samples")::int AS samples,
+                   (SELECT MIN("Bucket") FROM "PriceBuckets" WHERE "Pair" = @pair{rateFilter}) AS oldest
+            FROM "PriceBuckets"
             WHERE "Pair" = @pair
-              AND "TimestampUtc" >= @from{rateFilter}
+              AND "Bucket" >= @from{rateFilter}
             GROUP BY 1
             ORDER BY 1;
             """;
@@ -85,13 +91,15 @@ public sealed class PriceHistoryService
             while (await reader.ReadAsync(ct))
             {
                 var bucket = reader.GetFieldValue<DateTime>(0);
-                decimal? buy = reader.IsDBNull(1) ? null : reader.GetDecimal(1);
-                decimal? sell = reader.IsDBNull(2) ? null : reader.GetDecimal(2);
-                var samples = reader.GetInt32(3);
+                var buyCount = reader.IsDBNull(2) ? 0L : reader.GetInt64(2);
+                var sellCount = reader.IsDBNull(4) ? 0L : reader.GetInt64(4);
+                decimal? buy = buyCount > 0 && !reader.IsDBNull(1) ? reader.GetDecimal(1) / buyCount : null;
+                decimal? sell = sellCount > 0 && !reader.IsDBNull(3) ? reader.GetDecimal(3) / sellCount : null;
+                var samples = reader.IsDBNull(5) ? 0 : reader.GetInt32(5);
 
-                if (oldest is null && !reader.IsDBNull(4))
+                if (oldest is null && !reader.IsDBNull(6))
                 {
-                    var dt = reader.GetFieldValue<DateTime>(4);
+                    var dt = reader.GetFieldValue<DateTime>(6);
                     oldest = new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc));
                 }
 
@@ -114,7 +122,7 @@ public sealed class PriceHistoryService
         if (oldest is null)
         {
             await using var minCmd = conn.CreateCommand();
-            minCmd.CommandText = $"SELECT MIN(\"TimestampUtc\") FROM \"PriceQuotes\" WHERE \"Pair\" = @pair{rateFilter};";
+            minCmd.CommandText = $"SELECT MIN(\"Bucket\") FROM \"PriceBuckets\" WHERE \"Pair\" = @pair{rateFilter};";
             minCmd.Parameters.AddWithValue("pair", pair);
             if (!string.IsNullOrEmpty(rateType))
                 minCmd.Parameters.AddWithValue("rateType", rateType);

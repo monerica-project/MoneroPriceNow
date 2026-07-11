@@ -9,6 +9,7 @@ public sealed class PriceDbContext : DbContext
 
     public DbSet<Exchange> Exchanges => Set<Exchange>();
     public DbSet<PriceQuote> PriceQuotes => Set<PriceQuote>();
+    public DbSet<PriceBucket> PriceBuckets => Set<PriceBucket>();
     public DbSet<NetworkFeeQuote> NetworkFeeQuotes => Set<NetworkFeeQuote>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -43,6 +44,17 @@ public sealed class PriceDbContext : DbContext
 
             // Retention pruning: DELETE WHERE TimestampUtc < cutoff
             e.HasIndex(x => x.TimestampUtc);
+        });
+
+        b.Entity<PriceBucket>(e =>
+        {
+            e.HasKey(x => new { x.Pair, x.RateType, x.Bucket });
+            e.Property(x => x.Pair).HasMaxLength(64).IsRequired();
+            e.Property(x => x.RateType).HasMaxLength(16).IsRequired();
+            e.Property(x => x.SumBuy).HasPrecision(38, 10);
+            e.Property(x => x.SumSell).HasPrecision(38, 10);
+            // Chart query: WHERE Pair = ? AND RateType = ? AND Bucket >= ? ORDER BY Bucket.
+            // The composite primary key already provides this ordered range access.
         });
 
         b.Entity<NetworkFeeQuote>(e =>

@@ -219,6 +219,7 @@
     <div class="chart-wrap">
         <canvas id="priceChart" aria-label="XMR/@Model.QuoteLabel buy, sell, and market price history chart" role="img"></canvas>
         <div class="chart-empty" id="chartEmpty" hidden>Collecting price history… check back in a few minutes.</div>
+        <div class="chart-loading" id="chartLoading" hidden aria-hidden="true"><span class="chart-spinner"></span></div>
     </div>
     <div class="chart-note">
         Averages across all listed exchanges · <span class="chart-key chart-key-buy">Buy</span> ·
@@ -250,6 +251,7 @@
         <div class="chart-wrap">
             <canvas id="feeChart" aria-label="@feeNetTitle network fee history chart" role="img"></canvas>
             <div class="chart-empty" id="feeChartEmpty" hidden>Collecting fee history… check back in a few minutes.</div>
+            <div class="chart-loading" id="feeChartLoading" hidden aria-hidden="true"><span class="chart-spinner"></span></div>
         </div>
         <div class="chart-note">
             Typical-transaction fee over time · <span class="chart-key chart-key-market">USD</span> · auto-refreshing

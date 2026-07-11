@@ -83,7 +83,8 @@
             });
             console.log('[MoneroPriceNow] Sponsors loaded:', [...sponsorKeys]);
             renderSponsorSection();
-            startSponsorBanner();
+            // The top sponsor bar is now rendered by sponsorbar.js (loaded on every
+            // page via _Layout), so we no longer render it here to avoid double-render.
 
             // Re-apply sponsor row highlighting to the already-rendered table.
             // The table was built from seed data before this fetch completed,

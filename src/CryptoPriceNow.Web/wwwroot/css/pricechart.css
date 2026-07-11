@@ -96,6 +96,35 @@
 
 .chart-empty[hidden] { display: none; }
 
+/* Loading overlay shown while a range/rate change fetches new history. */
+.chart-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--bg, #16110c) 45%, transparent);
+    backdrop-filter: blur(1px);
+    z-index: 2;
+}
+
+.chart-loading[hidden] { display: none; }
+
+.chart-spinner {
+    width: 26px;
+    height: 26px;
+    border: 3px solid color-mix(in srgb, var(--xmr-orange2, #ff8c3a) 30%, transparent);
+    border-top-color: var(--xmr-orange2, #ff8c3a);
+    border-radius: 50%;
+    animation: chart-spin .7s linear infinite;
+}
+
+@keyframes chart-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .chart-spinner { animation-duration: 2s; }
+}
+
 .chart-note {
     margin-top: .55rem;
     font-family: var(--mono, ui-monospace, monospace);

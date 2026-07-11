@@ -157,11 +157,44 @@ public sealed class PriceQuoteLogger : BackgroundService, IPriceQuoteSink
         {
             db.PriceQuotes.AddRange(quotes);
             await db.SaveChangesAsync(ct);
+            await RefreshRollupAsync(db, snapshot.Pair, now, ct);
         }
         else if (db.ChangeTracker.HasChanges())
         {
             await db.SaveChangesAsync(ct); // metadata-only updates
         }
+    }
+
+    /// <summary>
+    /// Keeps the 1-minute <c>PriceBuckets</c> rollup current for this pair. Recomputes
+    /// the current (and previous, for boundary stragglers) minute bucket straight from
+    /// the raw quotes just written and upserts it — idempotent and self-healing, so a
+    /// missed or duplicated cycle can never corrupt the rollup. Reads only ~2 minutes of
+    /// raw rows for one pair, so it stays cheap even at full logging cadence.
+    /// </summary>
+    private static async Task RefreshRollupAsync(PriceDbContext db, string pair, DateTimeOffset now, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            INSERT INTO "PriceBuckets" ("Pair", "RateType", "Bucket", "SumBuy", "BuyCount", "SumSell", "SellCount", "Samples")
+            SELECT "Pair",
+                   "RateType",
+                   date_bin(INTERVAL '1 minute', "TimestampUtc", TIMESTAMPTZ '2000-01-03') AS bucket,
+                   COALESCE(SUM("Buy"), 0),  COUNT("Buy"),
+                   COALESCE(SUM("Sell"), 0), COUNT("Sell"),
+                   COUNT(*)
+            FROM "PriceQuotes"
+            WHERE "Pair" = {0}
+              AND "TimestampUtc" >= date_bin(INTERVAL '1 minute', {1}::timestamptz, TIMESTAMPTZ '2000-01-03') - INTERVAL '1 minute'
+            GROUP BY "Pair", "RateType", bucket
+            ON CONFLICT ("Pair", "RateType", "Bucket") DO UPDATE SET
+                "SumBuy"    = EXCLUDED."SumBuy",
+                "BuyCount"  = EXCLUDED."BuyCount",
+                "SumSell"   = EXCLUDED."SumSell",
+                "SellCount" = EXCLUDED."SellCount",
+                "Samples"   = EXCLUDED."Samples";
+            """,
+            new object[] { pair, now.UtcDateTime }, ct);
     }
 
     private async Task<CachedExchange> EnsureExchangeAsync(
