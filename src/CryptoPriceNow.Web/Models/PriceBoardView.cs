@@ -57,6 +57,15 @@ public sealed record PriceBoardView
     /// <summary>&lt;title&gt; text for the page.</summary>
     public required string Title { get; init; }
 
+    /// <summary>&lt;meta name="description"&gt; text for the page.</summary>
+    public string MetaDescription { get; init; } = "";
+
+    /// <summary>The page &lt;h1&gt; heading (kept compact so the live price stays the focus).</summary>
+    public string H1 { get; init; } = "";
+
+    /// <summary>Keyword-rich SEO paragraph rendered below the board (does not affect the price hero).</summary>
+    public string SeoText { get; init; } = "";
+
     /// <summary>Route slug. Empty string = site root "/". Otherwise e.g. "xmr-btc".</summary>
     public required string Slug { get; init; }
 
@@ -88,7 +97,10 @@ public static class PairCatalog
         Decimals = 2,
         MinValidPrice = 1m,
         IsUsd = true,
-        Title = "MoneroPriceNow.com — Live XMR / USDT Prices",
+        Title = "Monero Price (XMR) — Live USD Price Today, Chart & History",
+        MetaDescription = "The current Monero price (XMR) in USD, live today: real-time XMR to USD price, 24-hour change, interactive price chart, all-time high, and price history — plus actual buy and sell prices across exchanges.",
+        H1 = "Monero (XMR) Price",
+        SeoText = "Track the current <strong>Monero (XMR) price in USD</strong>, updated live today. This page shows the real-time <strong>XMR to USD price</strong>, the 24-hour change, an interactive <strong>price chart</strong>, the <strong>all-time high</strong>, and <strong>price history</strong> — alongside the actual buy and sell prices from exchanges, so you see what a Monero purchase would really cost, not just a mid-market number. Looking for the Monero price right now, the price today, or the current XMR value in dollars? It's all here, and you can switch to XMR/BTC or XMR/ETH using the tabs above.",
         Slug = "", // root
         FeeNetwork = "monero"
     };
@@ -105,7 +117,10 @@ public static class PairCatalog
         Decimals = 6,
         MinValidPrice = 0.0000001m,
         IsUsd = false,
-        Title = "MoneroPriceNow.com — Live XMR / BTC Prices",
+        Title = "Monero to Bitcoin Price (XMR/BTC) — Live Rate & Chart",
+        MetaDescription = "The live Monero to Bitcoin price (XMR/BTC): current exchange rate, 24-hour change, price chart, and real buy and sell prices across exchanges.",
+        H1 = "Monero to Bitcoin Price (XMR / BTC)",
+        SeoText = "See the live <strong>Monero to Bitcoin price (XMR/BTC)</strong> — the current exchange rate, 24-hour change, and an interactive <strong>chart</strong>, alongside the real buy and sell prices from exchanges. This is the rate you'd actually get converting XMR to BTC, not just a mid-market figure. Switch to XMR/USD or XMR/ETH with the tabs above.",
         Slug = "xmr-btc",
         FeeNetwork = "bitcoin"
     };
@@ -122,7 +137,10 @@ public static class PairCatalog
         Decimals = 5,
         MinValidPrice = 0.000001m,
         IsUsd = false,
-        Title = "MoneroPriceNow.com — Live XMR / ETH Prices",
+        Title = "Monero to Ethereum Price (XMR/ETH) — Live Rate & Chart",
+        MetaDescription = "The live Monero to Ethereum price (XMR/ETH): current exchange rate, 24-hour change, price chart, and real buy and sell prices across exchanges.",
+        H1 = "Monero to Ethereum Price (XMR / ETH)",
+        SeoText = "See the live <strong>Monero to Ethereum price (XMR/ETH)</strong> — the current exchange rate, 24-hour change, and an interactive <strong>chart</strong>, alongside the real buy and sell prices from exchanges. This is the rate you'd actually get converting XMR to ETH, not just a mid-market figure. Switch to XMR/USD or XMR/BTC with the tabs above.",
         Slug = "xmr-eth",
         FeeNetwork = "ethereum"
     };

@@ -30,6 +30,7 @@ public abstract class PriceBoardPageModelBase : PageModel
     public async Task LoadAsync(CancellationToken ct)
     {
         ViewData["Title"] = Pair.Title;
+        ViewData["Description"] = Pair.MetaDescription;
 
         try
         {

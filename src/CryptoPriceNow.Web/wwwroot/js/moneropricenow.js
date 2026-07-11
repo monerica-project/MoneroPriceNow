@@ -369,7 +369,7 @@
             .replaceAll('>', '&gt;').replaceAll('"', '&quot;')
             .replaceAll("'", '&#39;');
     }
-    function num(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+    function num(v) { if (v == null || v === '') return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
     function fmt(n) {
         const x = Number(n);
         if (!Number.isFinite(x)) return '--';
@@ -378,7 +378,8 @@
     function eq(a, b) { return a !== null && b !== null && Math.abs(a - b) < EPS; }
 
     function fmtMinAmt(v) {
-        if (v === null || v === undefined) return '--';
+        // A null/0/negative minimum means "unknown", not "$0.00".
+        if (v === null || v === undefined || !(Number(v) > 0)) return '--';
         return '$' + Number(v).toFixed(2);
     }
 
@@ -388,8 +389,12 @@
     }
 
     function updateTitle(mid) {
-        const m = (mid !== null && mid >= MINP) ? fmt(mid) : '--';
-        document.title = m + ' \u00b7 MoneroPriceNow.com';
+        // Keep the server-rendered, keyword-rich SEO title until we have a real price,
+        // then show the live price first (visible in a truncated tab) with a descriptive
+        // suffix \u2014 e.g. "$317.45 \u00b7 Monero (XMR) Price".
+        if (mid === null || mid < MINP) return;
+        const suffix = (window.__PAIR__ && window.__PAIR__.h1) ? window.__PAIR__.h1 : 'Monero (XMR) Price';
+        document.title = fmt(mid) + ' \u00b7 ' + suffix;
     }
 
     function pick(obj, ...keys) {
@@ -769,6 +774,17 @@
 
     let lastEdited = 'usd';
 
+    // Monero's smallest unit is 1 piconero = 1e-12 XMR, so an XMR amount can't have more than
+    // 12 decimal places — anything beyond that can't be paid. Truncate excess digits as they're
+    // typed (truncate, not round, so the amount never silently increases).
+    function clampPiconero(el) {
+        const v = el.value;
+        const dot = v.indexOf('.');
+        if (dot >= 0 && (v.length - dot - 1) > 12) {
+            el.value = v.slice(0, dot + 1 + 12);
+        }
+    }
+
     function getMarketPrice() {
         if (typeof window.__MARKET_PRICE__ === 'number' && window.__MARKET_PRICE__ > 0) {
             return window.__MARKET_PRICE__;
@@ -782,7 +798,8 @@
     }
 
     function fmtUsd(n) { return n.toFixed(P.decimals); }
-    function fmtXmr(n) { return n.toFixed(6).replace(/\.?0+$/, ''); }
+    // Show the full XMR amount to piconero precision (1 XMR = 1e12 piconero = 12 decimals).
+    function fmtXmr(n) { return n.toFixed(12).replace(/\.?0+$/, ''); }
 
     function recalc() {
         const price = getMarketPrice();
@@ -802,8 +819,72 @@
     }
 
     usdInput.addEventListener('input', () => { lastEdited = 'usd'; recalc(); });
-    xmrInput.addEventListener('input', () => { lastEdited = 'xmr'; recalc(); });
+    xmrInput.addEventListener('input', () => { clampPiconero(xmrInput); lastEdited = 'xmr'; recalc(); });
 
     // Re-run whenever prices update (call window.__convRecalc() from your price update code)
     window.__convRecalc = recalc;
+})();
+
+(function initInvoice() {
+    const builder = document.getElementById('invoiceBuilder');
+    const xmrInput = document.getElementById('convXmr');
+    const usdInput = document.getElementById('convUsd');
+    const addr = document.getElementById('invAddress');
+    const btn = document.getElementById('invBuildBtn');
+    const err = document.getElementById('invError');
+    const result = document.getElementById('invResult');
+    const img = document.getElementById('invImg');
+    const dl = document.getElementById('invDownload');
+    if (!builder || !xmrInput || !btn) return;
+
+    const P = Object.assign({ isUsd: true }, window.__PAIR__ || {});
+
+    function currentXmr() { const n = parseFloat(xmrInput.value); return (!isNaN(n) && n > 0) ? n : 0; }
+    function toggle() {
+        const has = currentXmr() > 0;
+        builder.hidden = !has;
+        if (!has) { result.hidden = true; err.hidden = true; }
+    }
+    xmrInput.addEventListener('input', toggle);
+    if (usdInput) usdInput.addEventListener('input', () => setTimeout(toggle, 0));
+    toggle();
+
+    function marketPrice() {
+        if (typeof window.__MARKET_PRICE__ === 'number' && window.__MARKET_PRICE__ > 0) return window.__MARKET_PRICE__;
+        const hero = document.getElementById('heroMid');
+        if (hero) { const n = parseFloat(hero.textContent.replace(/[^0-9.]/g, '')); if (!isNaN(n) && n > 0) return n; }
+        return null;
+    }
+    async function usdEstimate(xmr) {
+        if (P.isUsd) { const p = marketPrice(); return p ? xmr * p : null; }
+        try {
+            const r = await fetch('/api/prices?base=XMR&quote=USDTTRC');
+            const arr = await r.json();
+            const prices = arr.map(x => x.price).filter(v => typeof v === 'number' && v > 0);
+            if (!prices.length) return null;
+            return xmr * (prices.reduce((a, b) => a + b, 0) / prices.length);
+        } catch { return null; }
+    }
+
+    btn.addEventListener('click', async () => {
+        err.hidden = true; result.hidden = true;
+        const a = (addr.value || '').trim();
+        const xmrStr = (xmrInput.value || '').trim();
+        const xmr = parseFloat(xmrStr);
+        if (!(xmr > 0)) { err.textContent = 'Enter an amount in the converter first.'; err.hidden = false; return; }
+        if (!(a.length === 95 || a.length === 106) || !(a[0] === '4' || a[0] === '8')) {
+            err.textContent = 'Enter a valid Monero address (95 characters, starting with 4 or 8).'; err.hidden = false; return;
+        }
+        btn.disabled = true; btn.textContent = 'Building…';
+        const usd = await usdEstimate(xmr);
+        const params = new URLSearchParams({ address: a, xmr: xmrStr });
+        if (usd && usd > 0) params.set('usd', usd.toFixed(2));
+        const url = '/api/invoice?' + params.toString();
+        img.onload = () => { result.hidden = false; };
+        img.onerror = () => { err.textContent = 'Could not build the invoice — check the address.'; err.hidden = false; };
+        img.src = url;
+        dl.href = url;
+        result.hidden = false;
+        btn.disabled = false; btn.textContent = 'Build payment invoice in XMR';
+    });
 })();

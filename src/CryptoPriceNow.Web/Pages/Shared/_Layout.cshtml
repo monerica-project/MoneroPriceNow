@@ -12,6 +12,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"]</title>
+    @if (ViewData["Description"] is string desc && !string.IsNullOrEmpty(desc))
+    {
+        <meta name="description" content="@desc" />
+    }
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/css/moneropricenow-2026-05-30.css" asp-append-version="true" />
 </head>

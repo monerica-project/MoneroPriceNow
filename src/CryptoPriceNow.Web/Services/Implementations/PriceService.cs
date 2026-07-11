@@ -85,8 +85,33 @@ public sealed class PriceService : IPriceService
         // toggle between them. Drop fixed rows that came back empty (the exchange didn't offer a
         // fixed rate for this pair) so the Fixed view lists only exchanges that actually quote fixed.
         var floatRows = await FetchLiveAsync(baseRef, quoteRef, fixedRate: false, ct);
+        var floatByExchange = floatRows
+            .GroupBy(r => r.Exchange, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        // Build the Fixed rows. A "fixed" quote within 0.1% of the exchange's float quote is not a
+        // genuine fixed rate — the exchange just echoed its float rate for that side. Keep a row
+        // only if the exchange offers a genuinely different fixed rate on at least ONE side; then
+        // fill the OTHER side from its float quote so the row is complete. (Several exchanges only
+        // quote fixed in one direction — e.g. XMR->BTC but not BTC->XMR — and a bare "--" there
+        // looked broken.)
         var fixedRows = (await FetchLiveAsync(baseRef, quoteRef, fixedRate: true, ct))
-            .Where(r => r.Buy is not null || r.Sell is not null);
+            .Select(r =>
+            {
+                if (!floatByExchange.TryGetValue(r.Exchange, out var f))
+                    return (row: r, genuine: r.Sell is not null || r.Buy is not null);
+
+                var genuineSell = r.Sell is not null && !SameRate(r.Sell, f.Sell);
+                var genuineBuy = r.Buy is not null && !SameRate(r.Buy, f.Buy);
+                var row = r with
+                {
+                    Sell = genuineSell ? r.Sell : f.Sell,
+                    Buy = genuineBuy ? r.Buy : f.Buy,
+                };
+                return (row, genuine: genuineSell || genuineBuy);
+            })
+            .Where(t => t.genuine)
+            .Select(t => t.row);
         var rows = floatRows.Concat(fixedRows).ToList();
         latestRows[PairKey(baseRef, quoteRef)] = rows;
 
@@ -137,10 +162,22 @@ public sealed class PriceService : IPriceService
     private static readonly HashSet<string> FixedCapableKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "changenow", "fixedfloat", "exolix", "stealthex", "simpleswap", "trocador", "letsexchange",
-        "0trace", "swapuz", "changee", "swapgate", "bitania", "quickex", "pegasusswap",
+        "0trace", "swapuz", "changee", "swapgate", "bitania", "quickex", "pegasusswap", "sageswap",
     };
 
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
+
+    // A min-amount below ~$1 is not a real USD minimum: it's either 0 ("unknown") or a value the
+    // client returned in the QUOTE currency (e.g. 0.0001147 BTC) instead of USD. Crypto-swap
+    // minimums are always well above $1, so treat sub-$1 as unknown → the board shows "--" instead
+    // of "$0.00" and sorts it as absent.
+    private static decimal? Positive(decimal? v) => v is >= 1m ? v : null;
+
+    // True when a "fixed" quote is effectively identical to the float quote (within 0.1%). A real
+    // fixed rate carries a spread well above this, so a match means the exchange just echoed its
+    // float rate for that side — we null it so the Fixed view never duplicates the Float board.
+    private static bool SameRate(decimal? a, decimal? b)
+        => a is decimal x && b is decimal y && y != 0m && Math.Abs(x - y) / Math.Abs(y) < 0.001m;
     private async Task<IReadOnlyList<TwoWayPriceRow>> FetchLiveAsync(
         AssetRef baseRef, AssetRef quoteRef, bool fixedRate, CancellationToken ct)
     {
@@ -177,9 +214,9 @@ public sealed class PriceService : IPriceService
                     Buy: buyRes?.Price,
                     TsUtc: ts,
                     PrivacyLevel: (api as IPrivacyLevel)?.PrivacyLevel,
-                    MinAmountUsd: sellRes?.MinAmountUsd
-                                  ?? buyRes?.MinAmountUsd
-                                  ?? (api as IMinAmountUsd)?.MinAmountUsd,
+                    MinAmountUsd: Positive(sellRes?.MinAmountUsd)
+                                  ?? Positive(buyRes?.MinAmountUsd)
+                                  ?? Positive((api as IMinAmountUsd)?.MinAmountUsd),
                     RateType: rateType
                 );
             }
@@ -191,7 +228,7 @@ public sealed class PriceService : IPriceService
                     SiteUrl: api.SiteUrl,
                     Sell: null, Buy: null, TsUtc: null,
                     PrivacyLevel: (api as IPrivacyLevel)?.PrivacyLevel,
-                    MinAmountUsd: (api as IMinAmountUsd)?.MinAmountUsd,
+                    MinAmountUsd: Positive((api as IMinAmountUsd)?.MinAmountUsd),
                     RateType: rateType
                 );
             }

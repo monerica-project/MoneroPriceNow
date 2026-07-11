@@ -305,6 +305,21 @@ var _sponsorCacheTtl = TimeSpan.FromMinutes(
     builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 5));
 var _sponsorLock = new SemaphoreSlim(1, 1);
 
+// ── Monero payment invoice (/api/invoice) ────────────────────────────────────
+// Returns an SVG image with a scannable monero: QR code for the given address + amount.
+app.MapGet("/api/invoice", (string? address, decimal xmr, decimal? usd) =>
+{
+    address = (address ?? string.Empty).Trim();
+    if (!CryptoPriceNow.Web.Services.InvoiceBuilder.IsValidAddress(address) || xmr <= 0m)
+    {
+        return Results.BadRequest("Invalid Monero address or amount.");
+    }
+
+    var svg = CryptoPriceNow.Web.Services.InvoiceBuilder.BuildSvg(
+        address, xmr, usd, DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm"));
+    return Results.Content(svg, "image/svg+xml");
+});
+
 app.MapGet("/api/sponsors", async (IHttpClientFactory httpFactory, CancellationToken ct) =>
 {
     if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
