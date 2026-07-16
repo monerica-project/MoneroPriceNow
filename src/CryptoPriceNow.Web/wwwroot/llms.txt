@@ -1,0 +1,23 @@
+# MoneroPriceNow
+
+> MoneroPriceNow shows the live Monero (XMR) price with the real buy and sell prices aggregated across exchanges — not just a single mid-market number. It covers XMR priced in USD, Bitcoin, and Ethereum, with interactive charts, price history, and on-chain network fees.
+
+MoneroPriceNow is a free, privacy-respecting, open-source Monero price tracker and part of the Monerica project. No account is required and there is no visitor tracking; the only ads are clearly-labeled sponsors.
+
+## Price pages
+- [Monero (XMR) price in USD](https://moneropricenow.com/): Live XMR/USD price, 24-hour change, interactive chart, all-time high, price history, and real exchange buy/sell prices.
+- [Monero to Bitcoin (XMR/BTC)](https://moneropricenow.com/xmr-btc): Live Monero price denominated in Bitcoin, with chart and history.
+- [Monero to Ethereum (XMR/ETH)](https://moneropricenow.com/xmr-eth): Live Monero price denominated in Ethereum, with chart and history.
+
+## Network & data
+- [Network fees](https://moneropricenow.com/network): Current on-chain transaction fees for Monero, Bitcoin, and Ethereum.
+- Price API: https://moneropricenow.com/api/prices — JSON endpoint for live cross-exchange prices.
+
+## About
+- [About](https://moneropricenow.com/about): What the site is and how the prices are sourced.
+- [Sponsors](https://moneropricenow.com/sponsors): Sites that support MoneroPriceNow.
+- [Contact](https://moneropricenow.com/contact): How to get in touch.
+- [Privacy](https://moneropricenow.com/privacy): The site's privacy approach.
+
+## Related
+- [Monerica](https://monerica.com): Directory for the Monero circular economy.

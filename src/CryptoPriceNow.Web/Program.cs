@@ -102,6 +102,39 @@ app.UseAuthorization();
 app.MapStaticAssets();
 app.MapRazorPages().WithStaticAssets();
 
+// XML sitemap, generated from the same PairCatalog single-source-of-truth the
+// routes use (so a new pair shows up automatically) plus the static info pages.
+app.MapGet("/sitemap.xml", () =>
+{
+    const string origin = "https://moneropricenow.com";
+    var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+
+    var entries = new List<(string Loc, string ChangeFreq, string Priority)>();
+    // Live price pages — market-driven, so they change constantly.
+    foreach (var p in PairCatalog.All)
+        entries.Add((origin + p.Url, "hourly", string.IsNullOrEmpty(p.Slug) ? "1.0" : "0.9"));
+    // Stable informational pages.
+    foreach (var info in new[]
+        {
+            ("/network", "0.6"), ("/about", "0.5"),
+            ("/sponsors", "0.4"), ("/contact", "0.4"), ("/privacy", "0.3"),
+        })
+        entries.Add((origin + info.Item1, "monthly", info.Item2));
+
+    var sb = new System.Text.StringBuilder();
+    sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    sb.Append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+    foreach (var (loc, changefreq, priority) in entries)
+        sb.Append("  <url>\n")
+          .Append($"    <loc>{loc}</loc>\n")
+          .Append($"    <lastmod>{today}</lastmod>\n")
+          .Append($"    <changefreq>{changefreq}</changefreq>\n")
+          .Append($"    <priority>{priority}</priority>\n")
+          .Append("  </url>\n");
+    sb.Append("</urlset>\n");
+    return Results.Content(sb.ToString(), "application/xml");
+});
+
 app.MapGet("/api/prices", async (
     [FromServices] IPriceService prices,
     string @base,
