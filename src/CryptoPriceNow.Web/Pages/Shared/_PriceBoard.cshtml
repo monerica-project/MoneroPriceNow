@@ -113,12 +113,24 @@
 }
 
 <!-- Quick converter -->
+@{
+    // Constrain the quote input to the currency's real precision (USDT 2, BTC 8,
+    // ETH 18) and to its max supply on the integer side (USDT $1B, BTC 21M, ETH
+    // none). The JS in moneropricenow.js enforces these live; these attributes drive
+    // native validation. Falls back to the display Decimals if InputDecimals is unset.
+    var inputDec = Model.InputDecimals > 0 ? Model.InputDecimals : Model.Decimals;
+    var quoteStep = inputDec > 0 ? "0." + new string('0', inputDec - 1) + "1" : "1";
+    var quotePlaceholder = Model.Decimals > 0 ? "0." + new string('0', Model.Decimals) : "0";
+    string quoteMax = Model.MaxAmount.HasValue
+        ? Model.MaxAmount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        : null;
+}
 <div class="converter">
     <div class="conv-title">Quick Convert</div>
     <div class="conv-row">
         <div class="conv-field">
             <label for="convUsd">@Model.QuoteLabel</label>
-            <input type="number" id="convUsd" inputmode="decimal" step="any" min="0" placeholder="0.00" autocomplete="off" />
+            <input type="number" id="convUsd" inputmode="decimal" step="@quoteStep" min="0" max="@quoteMax" placeholder="@quotePlaceholder" autocomplete="off" />
         </div>
         <div class="conv-swap" aria-hidden="true">⇄</div>
         <div class="conv-field">
@@ -323,6 +335,8 @@
         symbol: "@Model.Symbol",
         suffix: "@Model.Suffix",
         decimals: @Model.Decimals,
+        inputDecimals: @(Model.InputDecimals > 0 ? Model.InputDecimals : Model.Decimals),
+        maxAmount: @(Model.MaxAmount.HasValue ? Model.MaxAmount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null"),
         minValidPrice: @minValid,
         isUsd: @(Model.IsUsd ? "true" : "false"),
         feeNetwork: "@Model.FeeNetwork",

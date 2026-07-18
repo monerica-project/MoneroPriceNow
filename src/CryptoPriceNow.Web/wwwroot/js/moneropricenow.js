@@ -773,6 +773,13 @@
     // the quote currency (USDT, BTC, ETH) — not necessarily USD.
     const P = Object.assign({ symbol: '$', suffix: '', decimals: 2 }, window.__PAIR__ || {});
 
+    // The quote field (USDT/BTC/ETH) can't hold more precision than the currency
+    // itself: USDT 2 dp, BTC 8 dp (satoshi), ETH 18 dp (wei) — P.inputDecimals. Its
+    // integer side is capped at the currency's max supply (P.maxAmount): USDT $1B,
+    // BTC 21M, ETH uncapped. Fall back to the display decimals / no cap if unset.
+    const QUOTE_DP = (typeof P.inputDecimals === 'number' && P.inputDecimals >= 0) ? P.inputDecimals : P.decimals;
+    const QUOTE_MAX = (typeof P.maxAmount === 'number' && P.maxAmount > 0) ? P.maxAmount : Infinity;
+
     let lastEdited = 'usd';
 
     // Monero's smallest unit is 1 piconero = 1e-12 XMR, so an XMR amount can't have more than
@@ -783,6 +790,23 @@
         const dot = v.indexOf('.');
         if (dot >= 0 && (v.length - dot - 1) > 12) {
             el.value = v.slice(0, dot + 1 + 12);
+        }
+    }
+
+    // Keep the quote field within its currency's precision as it's typed: truncate
+    // fractional digits past P.decimals (truncate, not round, so the value never
+    // silently grows), then cap the integer side (USD pairs → $1B max).
+    function clampQuote(el) {
+        let v = el.value;
+        if (v === '' || v === '-') return;
+        const dot = v.indexOf('.');
+        if (dot >= 0 && (v.length - dot - 1) > QUOTE_DP) {
+            v = QUOTE_DP > 0 ? v.slice(0, dot + 1 + QUOTE_DP) : v.slice(0, dot);
+            el.value = v;
+        }
+        const n = parseFloat(v);
+        if (!isNaN(n) && n > QUOTE_MAX) {
+            el.value = String(QUOTE_MAX);
         }
     }
 
@@ -819,7 +843,7 @@
         }
     }
 
-    usdInput.addEventListener('input', () => { lastEdited = 'usd'; recalc(); });
+    usdInput.addEventListener('input', () => { clampQuote(usdInput); lastEdited = 'usd'; recalc(); });
     xmrInput.addEventListener('input', () => { clampPiconero(xmrInput); lastEdited = 'xmr'; recalc(); });
 
     // Re-run whenever prices update (call window.__convRecalc() from your price update code)

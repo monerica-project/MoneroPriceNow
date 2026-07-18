@@ -45,6 +45,20 @@ public sealed record PriceBoardView
     public required int Decimals { get; init; }
 
     /// <summary>
+    /// Maximum decimal places the converter's quote input accepts — the currency's
+    /// real precision, not the display <see cref="Decimals"/>: USDT 2, BTC 8
+    /// (satoshi), ETH 18 (wei). Amounts typed past this are truncated live.
+    /// Defaults to <see cref="Decimals"/> when not set.
+    /// </summary>
+    public int InputDecimals { get; init; }
+
+    /// <summary>
+    /// Upper bound for the converter's quote input (its integer/"left" side): USDT
+    /// $1,000,000,000, BTC 21,000,000 (max supply). Null = no cap (e.g. ETH).
+    /// </summary>
+    public decimal? MaxAmount { get; init; }
+
+    /// <summary>
     /// Smallest value treated as a real (non-garbage) price. The front-end
     /// rejects anything below this. USD pairs use 1 (XMR is never &lt; $1);
     /// crypto pairs use a tiny floor so legitimate sub-1 ratios are kept.
@@ -95,6 +109,8 @@ public static class PairCatalog
         Symbol = "$",
         Suffix = "",
         Decimals = 2,
+        InputDecimals = 2,
+        MaxAmount = 1_000_000_000m,
         MinValidPrice = 1m,
         IsUsd = true,
         Title = "Monero Price (XMR) — Live USD Price Today, Chart & History",
@@ -115,6 +131,8 @@ public static class PairCatalog
         Symbol = "",
         Suffix = " BTC",
         Decimals = 6,
+        InputDecimals = 8,
+        MaxAmount = 21_000_000m,
         MinValidPrice = 0.0000001m,
         IsUsd = false,
         Title = "Monero to Bitcoin Price (XMR/BTC) — Live Rate & Chart",
@@ -135,6 +153,8 @@ public static class PairCatalog
         Symbol = "",
         Suffix = " ETH",
         Decimals = 5,
+        InputDecimals = 18,
+        MaxAmount = null, // ETH has no fixed max supply — no left cap
         MinValidPrice = 0.000001m,
         IsUsd = false,
         Title = "Monero to Ethereum Price (XMR/ETH) — Live Rate & Chart",
