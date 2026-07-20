@@ -638,17 +638,32 @@ a.ex-name {
         color: var(--xmr-orange2);
     }
 
-    a.ex-name::after {
-        content: ' ➤';
-        font-size: .6rem;
-        opacity: 0;
-        color: var(--xmr-orange);
-        transition: opacity .15s;
+    /* Keep the exchange name and its outbound arrow on one line (no mobile wrap). */
+    .ex-name-wrap {
+        white-space: nowrap;
     }
 
-    a.ex-name:hover::after {
-        opacity: 1;
+    /* Outbound arrow to the exchange's own swap page (the name itself links to the
+       Monerica directory profile). Padded for a comfortable tap/click target. */
+    a.ex-out {
+        margin-left: 1px;
+        padding: 4px 7px;
+        font-size: 1.05rem;
+        line-height: 1;
+        color: #9aa1ab;
+        text-decoration: none;
+        vertical-align: middle;
+        display: inline-block;
+        border-radius: 6px;
+        transition: color .15s, background .15s, transform .15s;
     }
+
+        a.ex-out:hover,
+        a.ex-out:focus-visible {
+            color: var(--xmr-orange2);
+            background: rgba(255, 140, 58, .12);
+            transform: translate(1px, -1px);
+        }
 
 span.ex-name {
     color: var(--text);

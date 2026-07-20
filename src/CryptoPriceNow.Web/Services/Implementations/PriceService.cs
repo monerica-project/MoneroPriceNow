@@ -163,6 +163,8 @@ public sealed class PriceService : IPriceService
     {
         "changenow", "fixedfloat", "exolix", "stealthex", "simpleswap", "trocador", "letsexchange",
         "0trace", "swapuz", "changee", "swapgate", "bitania", "quickex", "pegasusswap", "sageswap",
+        "swapzone", // aggregator supports rateType=fixed (client maps query.Fixed → fixed)
+        "explace",  // supports details.type=fix (client maps query.Fixed → fix)
     };
 
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
@@ -444,6 +446,11 @@ public sealed class PriceService : IPriceService
             // Restrict it to BTC/ETH so it surfaces on those pages and is skipped
             // (drops off) on the USDT page instead of firing a doomed estimate.
             ["wizardswap"]  = ["BTC", "ETH"],
+
+            // xChange.me can only SEND ~10 coins (no USDT), so USDT is sell-only there.
+            // Restrict to BTC/ETH — the only pairs where BOTH buy and sell work — so we
+            // never surface a one-sided USDT row.
+            ["xchange"]     = ["BTC", "ETH"],
         };
 
     private static bool QuoteSupported(string exchangeKey, AssetRef quote)

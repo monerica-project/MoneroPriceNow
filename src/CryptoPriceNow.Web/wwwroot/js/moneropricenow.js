@@ -428,14 +428,37 @@
         };
     }
 
+    // Monerica directory slug, derived from the exchange's display name (which comes from
+    // config): lower-case and collapse any non-alphanumeric run to a single hyphen. Matches
+    // monerica.com/site/<slug> for every listed exchange.
+    function monericaSlug(name) {
+        return String(name || '').trim().toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
+    // Name links to the exchange's Monerica directory profile; a trailing ↗ links out to the
+    // exchange's own swap page (the affiliate/sponsor URL).
     function nameLink(row) {
         const n = esc(row.siteName);
         const sKey = normName(row.siteName);
-        const href = sponsorLinks.has(sKey)
+        const outHref = sponsorLinks.has(sKey)
             ? esc(sponsorLinks.get(sKey))
             : row.siteUrl ? esc(row.siteUrl) : null;
-        return href
-            ? `<a class="ex-name" href="${href}" target="_blank" rel="noopener sponsored">${n}</a>`
+
+        const slug = monericaSlug(row.siteName);
+        const profileHref = slug ? `https://monerica.com/site/${slug}` : null;
+
+        if (profileHref) {
+            const arrow = outHref
+                ? ` <a class="ex-out" href="${outHref}" target="_blank" rel="noopener sponsored" title="Open ${n} to swap" aria-label="Open ${n} swap site in a new tab">&#8599;</a>`
+                : '';
+            return `<span class="ex-name-wrap"><a class="ex-name" href="${profileHref}" target="_blank" rel="noopener" title="${n} profile on Monerica">${n}</a>${arrow}</span>`;
+        }
+
+        // No Monerica profile yet: fall back to the name linking straight to the swap page.
+        return outHref
+            ? `<a class="ex-name" href="${outHref}" target="_blank" rel="noopener sponsored">${n}</a>`
             : `<span class="ex-name">${n}</span>`;
     }
 
