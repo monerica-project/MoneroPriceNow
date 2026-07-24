@@ -16,6 +16,7 @@ public sealed class PriceService : IPriceService
     private readonly IMemoryCache cache;
     private readonly PriceServiceOptions opt;
     private readonly IPriceQuoteSink quoteSink;
+    private readonly IHttpClientFactory httpFactory;
 
     // exchangeKey -> "float"|"fixed" — resolved once at startup from IRateType
     private readonly IReadOnlyDictionary<string, string> rateTypes;
@@ -35,9 +36,11 @@ public sealed class PriceService : IPriceService
         IEnumerable<IExchangeCurrencyApi> currencyApis,
         IMemoryCache cache,
         IOptions<PriceServiceOptions> options,
-        IPriceQuoteSink quoteSink)
+        IPriceQuoteSink quoteSink,
+        IHttpClientFactory httpFactory)
     {
         this.opt = options.Value;
+        this.httpFactory = httpFactory;
 
         // Drop exchanges that can't serve a two-way (buy + sell) XMR quote. This is
         // a two-way price site, so a sell-only venue (e.g. ChangeHero, which can't
@@ -188,6 +191,12 @@ public sealed class PriceService : IPriceService
             ? priceApis.Where(a => FixedCapableKeys.Contains(a.ExchangeKey))
             : (IEnumerable<IExchangePriceApi>)priceApis;
 
+        // Size the $2,500-standardized probes ONCE per cycle, before the fan-out — so the USD
+        // price lookup (rate-limited) is never inside an exchange's per-call timeout budget and
+        // isn't serialized across every exchange. Every exchange in this cycle uses the same size.
+        var sellProbe = await SellProbeAsync(baseRef, ct);
+        var buyProbe = await BuyProbeAsync(quoteRef, ct);
+
         var tasks = apis.Select(async api =>
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -199,9 +208,9 @@ public sealed class PriceService : IPriceService
 
             try
             {
-                var sellRes = await GetOneExchangeSellAsync(api, baseRef, quoteRef, fixedRate, cts.Token);
+                var sellRes = await GetOneExchangeSellAsync(api, baseRef, quoteRef, sellProbe, fixedRate, cts.Token);
                 var buyRes = api is IExchangeBuyPriceApi buyApi
-                    ? await GetOneExchangeBuyAsync(api.ExchangeKey, buyApi, baseRef, quoteRef, fixedRate, cts.Token)
+                    ? await GetOneExchangeBuyAsync(api.ExchangeKey, buyApi, baseRef, quoteRef, buyProbe, fixedRate, cts.Token)
                     : null;
 
                 var ts = sellRes?.TimestampUtc;
@@ -309,7 +318,7 @@ public sealed class PriceService : IPriceService
     // only calls the actual API when a per-exchange TTL expires.
 
     private Task<PriceResult?> GetOneExchangeSellAsync(
-        IExchangePriceApi api, AssetRef baseRef, AssetRef quoteRef, bool fixedRate, CancellationToken ct)
+        IExchangePriceApi api, AssetRef baseRef, AssetRef quoteRef, decimal? sellProbe, bool fixedRate, CancellationToken ct)
     {
         if (!QuoteSupported(api.ExchangeKey, quoteRef)) return Task.FromResult<PriceResult?>(null);
         var mode = fixedRate ? "fix" : "flt";
@@ -318,13 +327,14 @@ public sealed class PriceService : IPriceService
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
         {
             var (rb, rq) = await ResolveExchangeIdsAsync(api.ExchangeKey, baseRef, quoteRef, ct);
-            return await api.GetSellPriceAsync(new PriceQuery(rb, rq, Fixed: fixedRate), ct);
+            // Sell the base (XMR) for ~TargetTradeUsd (probe sized once per cycle by the caller).
+            return await api.GetSellPriceAsync(new PriceQuery(rb, rq, sellProbe, Fixed: fixedRate), ct);
         });
     }
 
     private Task<PriceResult?> GetOneExchangeBuyAsync(
         string exchangeKey, IExchangeBuyPriceApi api,
-        AssetRef baseRef, AssetRef quoteRef, bool fixedRate, CancellationToken ct)
+        AssetRef baseRef, AssetRef quoteRef, decimal? buyProbe, bool fixedRate, CancellationToken ct)
     {
         if (!QuoteSupported(exchangeKey, quoteRef)) return Task.FromResult<PriceResult?>(null);
         var mode = fixedRate ? "fix" : "flt";
@@ -333,7 +343,8 @@ public sealed class PriceService : IPriceService
         return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
         {
             var (rb, rq) = await ResolveExchangeIdsAsync(exchangeKey, baseRef, quoteRef, ct);
-            return await api.GetBuyPriceAsync(new PriceQuery(rb, rq, ProbeForQuote(rq), Fixed: fixedRate), ct);
+            // Pay ~TargetTradeUsd of the quote asset to receive XMR — same trade size as the sell side.
+            return await api.GetBuyPriceAsync(new PriceQuery(rb, rq, buyProbe, Fixed: fixedRate), ct);
         });
     }
 
@@ -457,19 +468,88 @@ public sealed class PriceService : IPriceService
         => !QuoteSupport.TryGetValue(exchangeKey, out var allowed)
            || allowed.Contains(quote.Ticker ?? string.Empty, StringComparer.OrdinalIgnoreCase);
 
-    // Buy-side probe size, denominated in the quote currency, handed to clients
-    // that quote "buy" by sending a fixed amount and reading XMR out. Their own
-    // defaults are sized for USDT (~100–500), which is absurd as "500 BTC" and
-    // overshoots every max — so for crypto quotes we supply a sane amount here.
-    // null = leave the client's own default (USDT path unchanged). These are
-    // ~a few hundred USD worth at typical rates; tune per quote as needed.
-    private static decimal? ProbeForQuote(AssetRef quote) =>
-        (quote.Ticker ?? string.Empty).Trim().ToUpperInvariant() switch
+    // ── $-standardized probe sizing ───────────────────────────────────────────
+    // Every quote is taken for a trade worth opt.TargetTradeUsd (default $2,500) so all
+    // exchanges — and both the buy and sell sides — are measured at the same, realistic size.
+    // Small trades quote a worse effective rate (fixed network/withdrawal fees weigh more
+    // heavily); the rate flattens out by a few thousand dollars.
+
+    private static readonly HashSet<string> StableTickers =
+        new(StringComparer.OrdinalIgnoreCase) { "USDT", "USDC", "DAI", "USD", "BUSD", "TUSD" };
+
+    // Sell probe: TargetTradeUsd worth of the base asset (XMR). Falls back to a configured
+    // XMR amount if the live price can't be fetched, so quoting never stops.
+    private async Task<decimal?> SellProbeAsync(AssetRef baseRef, CancellationToken ct)
+    {
+        var ticker = (baseRef.Ticker ?? "").Trim().ToUpperInvariant();
+        if (StableTickers.Contains(ticker)) return opt.TargetTradeUsd;
+        var usd = await GetUsdPriceAsync(ticker, ct);
+        return usd is decimal p && p > 0 ? RoundProbe(opt.TargetTradeUsd / p) : opt.FallbackSellProbeXmr;
+    }
+
+    // Round to 8 decimals: a raw `TargetTradeUsd / price` decimal carries ~27 digits, and some
+    // exchange APIs reject an amount with more than 8 dp (e.g. ETZ-Swap → validation error → the
+    // quote silently drops). 8 dp is within every asset's native precision and plenty for sizing.
+    private static decimal RoundProbe(decimal v) => Math.Round(v, 8, MidpointRounding.AwayFromZero);
+
+    // Buy probe: TargetTradeUsd worth of the quote asset paid to receive XMR. Stablecoins are
+    // ~$1; for crypto quotes fall back to the old fixed sizes if the price is unavailable.
+    private async Task<decimal?> BuyProbeAsync(AssetRef quote, CancellationToken ct)
+    {
+        var ticker = (quote.Ticker ?? "").Trim().ToUpperInvariant();
+        if (StableTickers.Contains(ticker)) return opt.TargetTradeUsd;
+        var usd = await GetUsdPriceAsync(ticker, ct);
+        if (usd is decimal p && p > 0) return RoundProbe(opt.TargetTradeUsd / p);
+        return ticker switch { "BTC" => 0.025m, "ETH" => 0.75m, _ => null };
+    }
+
+    // USD spot price for a ticker via CoinGecko (free, no key), cached briefly. Only used to
+    // size probes, so a miss just falls back to a fixed size — never blocks a quote. For
+    // ambiguous tickers it takes the highest-market-cap match.
+    private async Task<decimal?> GetUsdPriceAsync(string ticker, CancellationToken ct)
+    {
+        ticker = (ticker ?? "").Trim().ToLowerInvariant();
+        if (ticker.Length == 0) return null;
+
+        var ttl = TimeSpan.FromMinutes(Math.Clamp(opt.UsdPriceCacheMinutes, 1, 60));
+        return await GetOrCreateLockedAsync<decimal?>($"usd:{ticker}", ttl, ct, async () =>
         {
-            "BTC" => 0.01m,
-            "ETH" => 0.3m,
-            _ => null, // USDT / stablecoins: keep the client's existing default
-        };
+            // Returns 0m (not null) on any failure so the miss is CACHED — CoinGecko rate-limits
+            // (HTTP 429) the VPS, and an uncached miss would refetch every cycle. Callers treat
+            // 0 as "unknown" and fall back to a fixed probe size, so quoting is never blocked.
+            try
+            {
+                var url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&symbols="
+                          + Uri.EscapeDataString(ticker);
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.UserAgent.ParseAdd("MoneroPriceNow/1.0 (+https://moneropricenow.com)");
+
+                using var http = httpFactory.CreateClient();
+                http.Timeout = TimeSpan.FromSeconds(8);
+                using var res = await http.SendAsync(req, ct);
+                if (!res.IsSuccessStatusCode) return 0m;
+
+                var body = await res.Content.ReadAsStringAsync(ct);
+                using var doc = System.Text.Json.JsonDocument.Parse(body);
+                if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array) return 0m;
+
+                decimal best = 0; double bestCap = -1;
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    if (!el.TryGetProperty("current_price", out var cp) ||
+                        cp.ValueKind != System.Text.Json.JsonValueKind.Number) continue;
+                    double cap = el.TryGetProperty("market_cap", out var mc) &&
+                                 mc.ValueKind == System.Text.Json.JsonValueKind.Number ? mc.GetDouble() : 0;
+                    if (cap > bestCap) { bestCap = cap; best = cp.GetDecimal(); }
+                }
+                return best; // 0 if nothing usable — cached as a miss
+            }
+            catch
+            {
+                return 0m;
+            }
+        });
+    }
 
 
 
