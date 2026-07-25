@@ -133,4 +133,79 @@ public sealed class PriceHistoryService
 
         return new HistoryResult(pair, preset.Key, (int)preset.Bucket.TotalSeconds, points, oldest);
     }
+
+    /// <summary>
+    /// Same shape as <see cref="GetHistoryAsync"/> but for a SINGLE exchange. The pooled
+    /// PriceBuckets rollup isn't keyed by exchange, so this bins the raw PriceQuotes for
+    /// one exchange+pair with date_bin() at query time. A single exchange's quote stream
+    /// is a small fraction of the pooled table, so even a 30-day window stays cheap.
+    /// </summary>
+    public async Task<HistoryResult> GetExchangeHistoryAsync(
+        string exchangeKey, string pair, string? rangeKey, string? rateType = null, CancellationToken ct = default)
+    {
+        TryGetPreset(rangeKey, out var preset);
+        var fromUtc = DateTimeOffset.UtcNow - preset.Range;
+        var rateFilter = string.IsNullOrEmpty(rateType) ? string.Empty : " AND q.\"RateType\" = @rateType";
+
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        await db.Database.OpenConnectionAsync(ct);
+        var conn = (NpgsqlConnection)db.Database.GetDbConnection();
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT date_bin(@bucket, q."TimestampUtc", TIMESTAMPTZ '2000-01-03') AS bucket,
+                   SUM(q."Buy")  FILTER (WHERE q."Buy"  IS NOT NULL) AS sum_buy,
+                   COUNT(q."Buy")  AS buy_count,
+                   SUM(q."Sell") FILTER (WHERE q."Sell" IS NOT NULL) AS sum_sell,
+                   COUNT(q."Sell") AS sell_count,
+                   COUNT(*)::int   AS samples,
+                   (SELECT MIN(q2."TimestampUtc")
+                      FROM "PriceQuotes" q2 JOIN "Exchanges" e2 ON e2."Id" = q2."ExchangeId"
+                      WHERE e2."ExchangeKey" = @key AND q2."Pair" = @pair) AS oldest
+            FROM "PriceQuotes" q
+            JOIN "Exchanges" e ON e."Id" = q."ExchangeId"
+            WHERE e."ExchangeKey" = @key
+              AND q."Pair" = @pair
+              AND q."TimestampUtc" >= @from{rateFilter}
+            GROUP BY 1
+            ORDER BY 1;
+            """;
+        cmd.Parameters.AddWithValue("bucket", preset.Bucket);
+        cmd.Parameters.AddWithValue("key", exchangeKey);
+        cmd.Parameters.AddWithValue("pair", pair);
+        cmd.Parameters.AddWithValue("from", fromUtc);
+        if (!string.IsNullOrEmpty(rateType))
+            cmd.Parameters.AddWithValue("rateType", rateType);
+
+        var points = new List<HistoryPoint>();
+        DateTimeOffset? oldest = null;
+        await using (var reader = await cmd.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                var bucket = reader.GetFieldValue<DateTime>(0);
+                var buyCount = reader.IsDBNull(2) ? 0L : reader.GetInt64(2);
+                var sellCount = reader.IsDBNull(4) ? 0L : reader.GetInt64(4);
+                decimal? buy = buyCount > 0 && !reader.IsDBNull(1) ? reader.GetDecimal(1) / buyCount : null;
+                decimal? sell = sellCount > 0 && !reader.IsDBNull(3) ? reader.GetDecimal(3) / sellCount : null;
+                var samples = reader.IsDBNull(5) ? 0 : reader.GetInt32(5);
+
+                if (oldest is null && !reader.IsDBNull(6))
+                    oldest = new DateTimeOffset(DateTime.SpecifyKind(reader.GetFieldValue<DateTime>(6), DateTimeKind.Utc));
+
+                decimal? market = (buy, sell) switch
+                {
+                    (not null, not null) => (buy + sell) / 2m,
+                    (not null, null) => buy,
+                    (null, not null) => sell,
+                    _ => null
+                };
+
+                points.Add(new HistoryPoint(
+                    new DateTimeOffset(DateTime.SpecifyKind(bucket, DateTimeKind.Utc)), buy, sell, market, samples));
+            }
+        }
+
+        return new HistoryResult(pair, preset.Key, (int)preset.Bucket.TotalSeconds, points, oldest);
+    }
 }

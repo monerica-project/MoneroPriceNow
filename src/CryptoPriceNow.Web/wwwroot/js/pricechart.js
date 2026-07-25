@@ -21,9 +21,11 @@
         suffix: '',
         decimals: 2
     }, window.__PAIR__ || {});
-    const PAIR = PINFO.historyPair;
+    let PAIR = PINFO.historyPair;
+    // When set (exchange pages), the chart shows just this one exchange's quotes.
+    const EXCHANGE = PINFO.exchangeKey || null;
 
-    let currentRange = '1h';
+    let currentRange = '1d';
     let chart = null;
     let refreshTid = null;
     let everHadData = false;
@@ -209,7 +211,8 @@
         if (showSpinner) setLoading(true);
         try {
             const rt = window.__RATE_TYPE__ || 'float';
-            const url = `/api/history?pair=${encodeURIComponent(PAIR)}&range=${encodeURIComponent(currentRange)}&rateType=${encodeURIComponent(rt)}`;
+            let url = `/api/history?pair=${encodeURIComponent(PAIR)}&range=${encodeURIComponent(currentRange)}&rateType=${encodeURIComponent(rt)}`;
+            if (EXCHANGE) url += `&exchange=${encodeURIComponent(EXCHANGE)}`;
             const res = await fetch(url, { cache: 'no-store' });
             if (!res.ok) return;
             const data = await res.json();
@@ -253,6 +256,31 @@
                 .forEach(b => b.classList.toggle('chart-range-active', b === btn));
             load(true);
             schedule(); // reset the 30s cadence on manual range change
+        });
+    }
+
+    // ── Pair tabs (exchange pages only) ───────────────────────────────────────
+    // Buttons carry data-history-pair / -decimals / -symbol / -suffix. Switching
+    // re-points the same chart at another pair and rebuilds it so the axis reformats.
+    const pairTabsEl = document.getElementById('chartPairTabs');
+    if (pairTabsEl) {
+        pairTabsEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('.ex-pair-btn');
+            if (!btn || btn.dataset.historyPair === PAIR) return;
+
+            PAIR = btn.dataset.historyPair;
+            if (btn.dataset.decimals) PINFO.decimals = parseInt(btn.dataset.decimals, 10);
+            if (btn.dataset.symbol != null) PINFO.symbol = btn.dataset.symbol;
+            if (btn.dataset.suffix != null) PINFO.suffix = btn.dataset.suffix;
+
+            pairTabsEl.querySelectorAll('.ex-pair-btn')
+                .forEach(b => b.classList.toggle('ex-pair-active', b === btn));
+
+            currentRange = '1d';
+            if (chart) { chart.destroy(); chart = null; }  // rebuild so decimals/labels reset
+            everHadData = false;
+            load(true);
+            schedule();
         });
     }
 

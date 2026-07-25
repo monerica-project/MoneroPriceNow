@@ -18,7 +18,7 @@
 
     const REFRESH_MS = 60_000;
 
-    let currentRange = '1h';
+    let currentRange = '1d';
     let chart = null;
     let refreshTid = null;
     let everHadData = false;

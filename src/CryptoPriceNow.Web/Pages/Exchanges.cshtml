@@ -1,0 +1,44 @@
+@page "/exchanges"
+@model CryptoPriceNow.Pages.ExchangesModel
+
+<style>
+    .xl-head { margin:.4rem 0 .3rem; }
+    .xl-intro { margin:0 0 1.2rem; }
+    .xl-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:.6rem; margin:0 0 1.6rem; }
+    .xl-item { display:flex; align-items:center; gap:.5rem; border:1px solid var(--border,rgba(242,104,34,.25));
+        border-radius:9px; padding:.6rem .8rem; background:rgba(0,0,0,.15); text-decoration:none; color:var(--text,#e8dfd0); }
+    .xl-item:hover { border-color:var(--xmr-orange); }
+    .xl-item .xl-name { font-weight:600; }
+    .xl-count { color:var(--text-muted,#8a7a6a); font-size:.9rem; margin-left:auto; }
+</style>
+
+<h1 class="xl-head">Monero Exchanges</h1>
+<p class="xl-intro">
+    Every exchange we track live <strong>Monero (XMR) prices</strong> for. Open any one to see its real
+    XMR/USD, XMR/BTC and XMR/ETH buy and sell prices, an auto-updating chart, and its price history —
+    the actual rates from that exchange, not a mid-market average.
+</p>
+
+@if (Model.Exchanges.Count == 0)
+{
+    <p>No exchanges are being tracked right now.</p>
+}
+else
+{
+    <p class="xl-count-line"><strong>@Model.Exchanges.Count</strong> exchanges tracked.</p>
+    <div class="xl-grid">
+        @foreach (var e in Model.Exchanges)
+        {
+            var slug = CryptoPriceNow.Pages.ExchangesModel.Slug(e.SiteName);
+            <a class="xl-item" href="/exchange/@slug">
+                @if (!string.IsNullOrEmpty(e.PrivacyLevel))
+                {
+                    <span class="privacy-badge privacy-@(e.PrivacyLevel.ToUpperInvariant().Substring(0,1))">@e.PrivacyLevel.ToUpperInvariant().Substring(0,1)</span>
+                }
+                <span class="xl-name">@e.SiteName</span>
+            </a>
+        }
+    </div>
+}
+
+<p><a href="/" style="color:var(--xmr-orange);text-decoration:none;">&larr; Back to all Monero prices</a></p>

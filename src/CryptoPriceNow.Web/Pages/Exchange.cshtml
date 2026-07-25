@@ -1,0 +1,227 @@
+@page "/exchange/{name}"
+@model CryptoPriceNow.Pages.ExchangeModel
+@{
+    var ex = Model.Exchange;
+    var priced = Model.Pairs;
+    var first = priced.FirstOrDefault();
+    var defRate = Model.DefaultRate;
+
+    // Current side for a pair under the default rate (what we server-render before the ticker runs).
+    CryptoPriceNow.Pages.ExchangeModel.Side? DefaultSide(CryptoPriceNow.Pages.ExchangeModel.PairPrice p)
+        => defRate == "float" ? (p.Float ?? p.Fixed) : (p.Fixed ?? p.Float);
+}
+
+<link rel="stylesheet" href="~/css/pricechart.css" asp-append-version="true" />
+<style>
+    .ex-page-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem .9rem; margin:.4rem 0 .3rem; }
+    .ex-page-head h1 { margin:0; font-size:1.6rem; }
+    .ex-links { margin:.2rem 0 1rem; display:flex; flex-wrap:wrap; gap:.5rem .9rem; align-items:center; }
+    .ex-links a { color:var(--xmr-orange); text-decoration:none; }
+    .ex-links a:hover { text-decoration:underline; }
+    .ex-rate-bar { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin:0 0 .9rem; }
+    .ex-rate-toggle { display:inline-flex; border:1px solid var(--border,rgba(242,104,34,.3)); border-radius:999px; overflow:hidden; }
+    .ex-rate-btn { background:transparent; border:0; color:var(--text,#e8dfd0); padding:.3rem .9rem; cursor:pointer; font-size:.85rem; }
+    .ex-rate-btn.ex-rate-active { background:var(--xmr-orange); color:#1a1a1a; font-weight:700; }
+    .ex-rate-label { font-weight:700; }
+    .ex-rate-help { color:var(--text-muted,#8a7a6a); font-size:.82rem; }
+    .ex-price-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.8rem; margin:0 0 1rem; }
+    .ex-card { border:1px solid var(--border,rgba(242,104,34,.25)); border-radius:10px; padding:.8rem .9rem; background:rgba(0,0,0,.15); }
+    .ex-card h2 { font-size:1rem; margin:0 0 .5rem; }
+    .ex-card .row { display:flex; justify-content:space-between; gap:.6rem; font-family:var(--mono,monospace); }
+    .ex-card .row + .row { margin-top:.25rem; }
+    .ex-card .lbl { color:var(--text-muted,#8a7a6a); }
+    .ex-card .buy { color:var(--good,#3ecf8e); }
+    .ex-card .sell { color:var(--xmr-orange2,#ff8c3a); }
+    .ex-live-row { display:flex; align-items:center; gap:.45rem; color:var(--text-muted,#8a7a6a);
+        font-size:.8rem; margin:0 0 1.4rem; flex-wrap:wrap; }
+    .ex-live-row .ex-next { margin-left:.2rem; }
+    .ex-live-dot { width:8px; height:8px; border-radius:50%; background:var(--good,#3ecf8e);
+        box-shadow:0 0 0 0 rgba(62,207,142,.5); animation:exPulse 2s infinite; }
+    @@keyframes exPulse { 0%{box-shadow:0 0 0 0 rgba(62,207,142,.5);} 70%{box-shadow:0 0 0 6px rgba(62,207,142,0);} 100%{box-shadow:0 0 0 0 rgba(62,207,142,0);} }
+    .ex-pair-tabs { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 .4rem; }
+    .ex-pair-btn { background:transparent; border:1px solid var(--border,rgba(242,104,34,.3)); color:var(--text,#e8dfd0);
+        border-radius:999px; padding:.25rem .7rem; cursor:pointer; font-size:.85rem; }
+    .ex-pair-btn.ex-pair-active { background:var(--xmr-orange); border-color:var(--xmr-orange); color:#1a1a1a; font-weight:600; }
+    .ex-sponsor-badge { background:var(--xmr-orange); color:#1a1a1a; font-weight:700; font-size:.75rem;
+        border-radius:999px; padding:.15rem .6rem; letter-spacing:.02em; }
+    .ex-sponsor-note { margin:.1rem 0 1rem; padding:.5rem .8rem; border-left:3px solid var(--xmr-orange);
+        background:rgba(242,104,34,.08); border-radius:4px; }
+    .ex-sponsor-note #exSponsorTier { color:var(--text-muted,#8a7a6a); font-weight:400; }
+</style>
+
+<div class="ex-page-head">
+    <h1>@ex.SiteName — Monero (XMR) Price</h1>
+    @if (!string.IsNullOrEmpty(ex.PrivacyLevel))
+    {
+        <span class="privacy-badge privacy-@(ex.PrivacyLevel.ToUpperInvariant().Substring(0,1))">@ex.PrivacyLevel.ToUpperInvariant().Substring(0,1)</span>
+    }
+    <span class="ex-sponsor-badge" id="exSponsorBadge" hidden>★ Sponsor</span>
+</div>
+
+<p class="ex-sponsor-note" id="exSponsorNote" hidden>
+    <strong>@ex.SiteName is a Monerica sponsor.</strong>
+    <span id="exSponsorTier"></span>
+</p>
+
+<div class="ex-links">
+    <a href="@Model.MonericaUrl" target="_blank" rel="noopener">View @ex.SiteName on Monerica&#39;s directory &rarr;</a>
+    @if (!string.IsNullOrEmpty(ex.SiteUrl))
+    {
+        <span>·</span>
+        <a id="exOutLink" href="@ex.SiteUrl" target="_blank" rel="noopener sponsored">Go to @ex.SiteName &#8599;</a>
+    }
+</div>
+
+@if (priced.Count == 0)
+{
+    <p>No live prices for @ex.SiteName right now — it may be temporarily unavailable. Check back shortly.</p>
+}
+else
+{
+    <!-- Rate type: a Float/Fixed selector when the exchange offers both, else a clear label. -->
+    <div class="ex-rate-bar">
+        @if (Model.HasBothRates)
+        {
+            <div class="ex-rate-toggle" id="exRateToggle" role="group" aria-label="Rate type">
+                <button type="button" class="ex-rate-btn ex-rate-active" data-rate="float">Floating</button>
+                <button type="button" class="ex-rate-btn" data-rate="fixed">Fixed</button>
+            </div>
+            <span class="ex-rate-help">
+                <strong>@ex.SiteName offers both.</strong>
+                <span id="exRateHelp">Floating rates move with the market until your swap completes.</span>
+            </span>
+        }
+        else
+        {
+            <span class="ex-rate-label">@(Model.HasFloat ? "Floating rate" : "Fixed rate")</span>
+            <span class="ex-rate-help">
+                @(Model.HasFloat
+                    ? "This exchange quotes a floating rate — it moves with the market until your swap completes."
+                    : "This exchange quotes a fixed rate — locked when you start the swap.")
+            </span>
+        }
+    </div>
+
+    <p class="ex-intro">
+        The current Monero buy and sell prices logged for <strong>@ex.SiteName</strong>,
+        across the @priced.Count pair@(priced.Count == 1 ? "" : "s") it quotes. These are the
+        actual rates from @ex.SiteName, not a mid-market average.
+    </p>
+
+    <div class="ex-price-cards">
+        @foreach (var p in priced)
+        {
+            var side = DefaultSide(p);
+            <div class="ex-card" data-quote="@p.Pair.ApiQuote">
+                <h2>XMR / @p.Pair.QuoteLabel</h2>
+                <div class="row"><span class="lbl">Buy</span><span class="buy" data-side="buy">@p.Format(side?.Buy)</span></div>
+                <div class="row"><span class="lbl">Sell</span><span class="sell" data-side="sell">@p.Format(side?.Sell)</span></div>
+            </div>
+        }
+    </div>
+
+    <div class="ex-live-row">
+        <span class="ex-live-dot" aria-hidden="true"></span>
+        <span id="exUpdated">Live prices</span>
+        <span class="ex-next">next update</span>
+        <div class="countdown-wrap">
+            <div class="countdown-ring">
+                <svg width="16" height="16" viewBox="0 0 16 16">
+                    <circle class="ring-bg" cx="8" cy="8" r="6" />
+                    <circle class="ring-fill" cx="8" cy="8" r="6" id="exRingFill"
+                            stroke-dasharray="37.7" stroke-dashoffset="0" />
+                </svg>
+            </div>
+            <span id="exCountdown">15s</span>
+        </div>
+    </div>
+
+    <!-- Per-exchange price history chart -->
+    <div class="chart-section" id="chartSection">
+        <div class="chart-head">
+            <div class="chart-title-wrap">
+                <span class="chart-title">@ex.SiteName Price History</span>
+                <span class="chart-trend" id="chartTrend"></span>
+            </div>
+            <div class="chart-ranges" id="chartRanges" role="group" aria-label="Chart time range">
+                <button type="button" class="chart-range-btn" data-range="1h">1h</button>
+                <button type="button" class="chart-range-btn" data-range="4h" hidden>4h</button>
+                <button type="button" class="chart-range-btn" data-range="12h" hidden>12h</button>
+                <button type="button" class="chart-range-btn chart-range-active" data-range="1d">1d</button>
+                <button type="button" class="chart-range-btn" data-range="3d" hidden>3d</button>
+                <button type="button" class="chart-range-btn" data-range="7d" hidden>7d</button>
+                <button type="button" class="chart-range-btn" data-range="30d" hidden>30d</button>
+            </div>
+        </div>
+
+        @if (priced.Count > 1)
+        {
+            <div class="ex-pair-tabs" id="chartPairTabs" role="group" aria-label="Trading pair">
+                @foreach (var (p, i) in priced.Select((p, i) => (p, i)))
+                {
+                    <button type="button"
+                            class="ex-pair-btn @(i == 0 ? "ex-pair-active" : "")"
+                            data-history-pair="@p.Pair.HistoryPair"
+                            data-decimals="@p.Pair.Decimals"
+                            data-symbol="@p.Pair.Symbol"
+                            data-suffix="@p.Pair.Suffix">
+                        XMR/@p.Pair.QuoteLabel
+                    </button>
+                }
+            </div>
+        }
+
+        <div class="chart-wrap">
+            <canvas id="priceChart" aria-label="@ex.SiteName XMR price history chart" role="img"></canvas>
+            <div class="chart-empty" id="chartEmpty" hidden>Collecting price history for @ex.SiteName… check back in a few minutes.</div>
+            <div class="chart-loading" id="chartLoading" hidden aria-hidden="true"><span class="chart-spinner"></span></div>
+        </div>
+        <div class="chart-note">
+            @ex.SiteName · <span id="chartRateNote">@(defRate == "float" ? "floating rate" : "fixed rate")</span> ·
+            <span class="chart-key chart-key-buy">Buy</span> ·
+            <span class="chart-key chart-key-sell">Sell</span> ·
+            <span class="chart-key chart-key-market">Market</span> · auto-refreshing
+        </div>
+    </div>
+
+    <script>
+        // One exchange, ONE rate type at a time — never averaged together (mixing float and
+        // fixed, which differ by ~1%, makes the forming bucket swing). Default to floating.
+        window.__RATE_TYPE__ = "@defRate";
+        window.__PAIR__ = {
+            historyPair: "@(first!.Pair.HistoryPair)",
+            symbol: "@first!.Pair.Symbol",
+            suffix: "@first!.Pair.Suffix",
+            decimals: @first!.Pair.Decimals,
+            exchangeKey: "@ex.ExchangeKey"
+        };
+        window.__EXCHANGE__ = {
+            key: "@ex.ExchangeKey",
+            name: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ex.SiteName)),
+            defaultRate: "@defRate",
+            pairs: [
+                @foreach (var p in priced)
+                {
+                    <text>{
+                        apiQuote: "@p.Pair.ApiQuote", decimals: @p.Pair.Decimals,
+                        symbol: "@p.Pair.Symbol", suffix: "@p.Pair.Suffix",
+                        float: @(p.Float is null ? "null" : $"{{ buy: {Fmt(p.Float.Buy)}, sell: {Fmt(p.Float.Sell)} }}"),
+                        fixed: @(p.Fixed is null ? "null" : $"{{ buy: {Fmt(p.Fixed.Buy)}, sell: {Fmt(p.Fixed.Sell)} }}")
+                    },</text>
+                }
+            ]
+        };
+    </script>
+    <script src="~/lib/chartjs/chart.umd.min.js" asp-append-version="true"></script>
+    <script src="~/js/pricechart.js" asp-append-version="true"></script>
+    <script src="~/js/exchangepage.js" asp-append-version="true"></script>
+}
+
+<p style="margin-top:1.6rem;">
+    <a href="/exchanges" style="color:var(--xmr-orange);text-decoration:none;">&larr; All Monero exchanges</a>
+</p>
+
+@functions {
+    // Emit a nullable decimal as a JS number literal or 'null'.
+    static string Fmt(decimal? v) => v?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null";
+}

@@ -42,6 +42,11 @@ public sealed class PriceDbContext : DbContext
             // Per-exchange history / debugging
             e.HasIndex(x => new { x.ExchangeId, x.TimestampUtc });
 
+            // Per-exchange, per-pair charting (/exchange/{name} and /api/history?exchange=).
+            // The exact predicate is (ExchangeId, Pair, TimestampUtc >= from); without this
+            // composite the planner falls back to a broader index and over-scans.
+            e.HasIndex(x => new { x.ExchangeId, x.Pair, x.TimestampUtc });
+
             // Retention pruning: DELETE WHERE TimestampUtc < cutoff
             e.HasIndex(x => x.TimestampUtc);
         });

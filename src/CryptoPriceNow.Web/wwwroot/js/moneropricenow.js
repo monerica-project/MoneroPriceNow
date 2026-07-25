@@ -428,17 +428,18 @@
         };
     }
 
-    // Monerica directory slug, derived from the exchange's display name (which comes from
-    // config): lower-case and collapse any non-alphanumeric run to a single hyphen. Matches
-    // monerica.com/site/<slug> for every listed exchange.
-    function monericaSlug(name) {
+    // Slug from the exchange's display name (from config): lower-case, collapse any
+    // non-alphanumeric run to a single hyphen. Used for BOTH our own /exchange/<slug>
+    // page and monerica.com/site/<slug>. Mirrors ExchangeSlug.From() on the server.
+    function exchangeSlug(name) {
         return String(name || '').trim().toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-+|-+$/g, '');
     }
 
-    // Name links to the exchange's Monerica directory profile; a trailing ↗ links out to the
-    // exchange's own swap page (the affiliate/sponsor URL).
+    // Name links to this exchange's page on THIS site (/exchange/<slug>) — its 3 pairs,
+    // current price and per-exchange chart. A trailing ↗ links out to the exchange's own
+    // swap page (the affiliate/sponsor URL). The exchange page itself links to Monerica.
     function nameLink(row) {
         const n = esc(row.siteName);
         const sKey = normName(row.siteName);
@@ -446,17 +447,17 @@
             ? esc(sponsorLinks.get(sKey))
             : row.siteUrl ? esc(row.siteUrl) : null;
 
-        const slug = monericaSlug(row.siteName);
-        const profileHref = slug ? `https://monerica.com/site/${slug}` : null;
+        const slug = exchangeSlug(row.siteName);
+        const pageHref = slug ? `/exchange/${slug}` : null;
 
-        if (profileHref) {
+        if (pageHref) {
             const arrow = outHref
                 ? ` <a class="ex-out" href="${outHref}" target="_blank" rel="noopener sponsored" title="Open ${n} to swap" aria-label="Open ${n} swap site in a new tab">&#8599;</a>`
                 : '';
-            return `<span class="ex-name-wrap"><a class="ex-name" href="${profileHref}" target="_blank" rel="noopener" title="${n} profile on Monerica">${n}</a>${arrow}</span>`;
+            return `<span class="ex-name-wrap"><a class="ex-name" href="${pageHref}" title="${n} prices &amp; chart">${n}</a>${arrow}</span>`;
         }
 
-        // No Monerica profile yet: fall back to the name linking straight to the swap page.
+        // No slug (shouldn't happen): fall back to the name linking straight to the swap page.
         return outHref
             ? `<a class="ex-name" href="${outHref}" target="_blank" rel="noopener sponsored">${n}</a>`
             : `<span class="ex-name">${n}</span>`;

@@ -104,7 +104,7 @@ app.MapRazorPages().WithStaticAssets();
 
 // XML sitemap, generated from the same PairCatalog single-source-of-truth the
 // routes use (so a new pair shows up automatically) plus the static info pages.
-app.MapGet("/sitemap.xml", () =>
+app.MapGet("/sitemap.xml", async (HttpContext http, CancellationToken ct) =>
 {
     const string origin = "https://moneropricenow.com";
     var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
@@ -113,6 +113,23 @@ app.MapGet("/sitemap.xml", () =>
     // Live price pages — market-driven, so they change constantly.
     foreach (var p in PairCatalog.All)
         entries.Add((origin + p.Url, "hourly", string.IsNullOrEmpty(p.Slug) ? "1.0" : "0.9"));
+
+    // The browsable exchange index and one page per active exchange (slug from its name).
+    var directory = http.RequestServices.GetService<CryptoPriceNow.Data.Services.ExchangeDirectoryService>();
+    if (directory is not null)
+    {
+        try
+        {
+            entries.Add(($"{origin}/exchanges", "daily", "0.8"));
+            foreach (var e in await directory.GetActiveAsync(ct))
+            {
+                var slug = CryptoPriceNow.Data.Services.ExchangeSlug.From(e.SiteName);
+                if (!string.IsNullOrEmpty(slug))
+                    entries.Add(($"{origin}/exchange/{slug}", "hourly", "0.7"));
+            }
+        }
+        catch { /* DB unavailable — ship the sitemap without exchange pages rather than 500. */ }
+    }
     // Stable informational pages.
     foreach (var info in new[]
         {
@@ -171,6 +188,7 @@ app.MapGet("/api/history", async (
     string? pair,
     string? range,
     string? rateType,
+    string? exchange,
     CancellationToken ct) =>
 {
     var history = http.RequestServices.GetService<PriceHistoryService>();
@@ -193,9 +211,15 @@ app.MapGet("/api/history", async (
     if (trackedPair is null)
         return Results.BadRequest(new { error = "unknown pair" });
 
+    // Optional single-exchange filter: /api/history?...&exchange=<key> charts just that
+    // exchange (raw quotes binned on the fly) instead of the pooled all-exchange rollup.
+    var exchangeKey = string.IsNullOrWhiteSpace(exchange) ? null : exchange.Trim();
+
     try
     {
-        var result = await history.GetHistoryAsync(trackedPair.HistoryPair, range, rt, ct);
+        var result = exchangeKey is null
+            ? await history.GetHistoryAsync(trackedPair.HistoryPair, range, rt, ct)
+            : await history.GetExchangeHistoryAsync(exchangeKey, trackedPair.HistoryPair, range, rt, ct);
 
         // Which range presets have enough history behind them to be worth showing?
         // A range is available once data spans at least that far back. The shortest

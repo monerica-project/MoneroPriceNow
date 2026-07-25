@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService(sp => sp.GetRequiredService<PriceQuoteLogger>());
 
         services.AddSingleton<PriceHistoryService>();
+        services.AddSingleton<ExchangeDirectoryService>();
 
         // Network-fee time-series logging + history (same pattern).
         services.AddSingleton<NetworkFeeQuoteLogger>();
