@@ -212,11 +212,16 @@ ok "Maintenance page installed at $MAINT_DIR"
 # nginx's default server (another site). We now (re)configure nginx ONLY when the
 # SSL vhost isn't already present, or when --nginx is passed. Steady-state deploys
 # leave the working vhost untouched: no gap, no certbot churn.
+# HAS_TLS is otherwise only assigned inside the `if (( NEED_NGINX ))` block below, so a
+# routine deploy that skips that block would leave it unset and the smoke test's
+# `(( HAS_TLS ))` would trip `set -u`. Default it here; the skip branch confirms 443 is present.
+HAS_TLS=0
 NEED_NGINX=1
 if (( ! FORCE_NGINX )) \
    && ssh "$VPS" "sudo grep -qs 'listen 443 ssl' /etc/nginx/sites-enabled/$APP_NAME.conf \
         && sudo grep -qs 'server_name .*$DOMAIN' /etc/nginx/sites-enabled/$APP_NAME.conf"; then
     NEED_NGINX=0
+    HAS_TLS=1   # the grep above just confirmed a working 443 SSL vhost
     ok "nginx vhost for $DOMAIN already configured (443 SSL present) — leaving it untouched (use --nginx to force)"
 fi
 

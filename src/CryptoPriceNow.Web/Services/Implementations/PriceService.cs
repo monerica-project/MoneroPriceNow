@@ -168,6 +168,9 @@ public sealed class PriceService : IPriceService
         "0trace", "swapuz", "changee", "swapgate", "bitania", "quickex", "pegasusswap", "sageswap",
         "swapzone", // aggregator supports rateType=fixed (client maps query.Fixed → fixed)
         "explace",  // supports details.type=fix (client maps query.Fixed → fix)
+        "ccecash",  // supports exchange_mode=fixed on /calculate (client maps query.Fixed → fixed)
+        "etzswap",  // supports rateType=fixed on /deposit/public/rate (client maps query.Fixed → fixed)
+        "alfacash", // rate.json returns rate (fixed) + rate_floating; client maps query.Fixed → fixed rate
     };
 
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
