@@ -145,37 +145,59 @@ public sealed class PriceHistoryService
     {
         TryGetPreset(rangeKey, out var preset);
         var fromUtc = DateTimeOffset.UtcNow - preset.Range;
-        var rateFilter = string.IsNullOrEmpty(rateType) ? string.Empty : " AND q.\"RateType\" = @rateType";
+        var rateFilter = string.IsNullOrEmpty(rateType) ? string.Empty : " AND \"RateType\" = @rateType";
 
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         await db.Database.OpenConnectionAsync(ct);
         var conn = (NpgsqlConnection)db.Database.GetDbConnection();
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            SELECT date_bin(@bucket, q."TimestampUtc", TIMESTAMPTZ '2000-01-03') AS bucket,
-                   SUM(q."Buy")  FILTER (WHERE q."Buy"  IS NOT NULL) AS sum_buy,
-                   COUNT(q."Buy")  AS buy_count,
-                   SUM(q."Sell") FILTER (WHERE q."Sell" IS NOT NULL) AS sum_sell,
-                   COUNT(q."Sell") AS sell_count,
-                   COUNT(*)::int   AS samples,
-                   (SELECT MIN(q2."TimestampUtc")
-                      FROM "PriceQuotes" q2 JOIN "Exchanges" e2 ON e2."Id" = q2."ExchangeId"
-                      WHERE e2."ExchangeKey" = @key AND q2."Pair" = @pair) AS oldest
-            FROM "PriceQuotes" q
-            JOIN "Exchanges" e ON e."Id" = q."ExchangeId"
-            WHERE e."ExchangeKey" = @key
-              AND q."Pair" = @pair
-              AND q."TimestampUtc" >= @from{rateFilter}
-            GROUP BY 1
-            ORDER BY 1;
-            """;
-        cmd.Parameters.AddWithValue("bucket", preset.Bucket);
-        cmd.Parameters.AddWithValue("key", exchangeKey);
-        cmd.Parameters.AddWithValue("pair", pair);
-        cmd.Parameters.AddWithValue("from", fromUtc);
-        if (!string.IsNullOrEmpty(rateType))
-            cmd.Parameters.AddWithValue("rateType", rateType);
+        // Resolve the exchange key to its id ONCE (unique-indexed lookup), then filter
+        // PriceQuotes by ExchangeId directly. Joining Exchanges into the main aggregate and
+        // the "oldest" subquery blocked the composite index: the oldest MIN became a 137k-row
+        // scan instead of an O(log n) index probe. Filtering by id keeps both index-tight.
+        await using (var idCmd = conn.CreateCommand())
+        {
+            idCmd.CommandText = "SELECT \"Id\" FROM \"Exchanges\" WHERE \"ExchangeKey\" = @key LIMIT 1;";
+            idCmd.Parameters.AddWithValue("key", exchangeKey);
+            var idObj = await idCmd.ExecuteScalarAsync(ct);
+            if (idObj is not int exchangeId)
+            {
+                return new HistoryResult(pair, preset.Key, (int)preset.Bucket.TotalSeconds, new List<HistoryPoint>(), null);
+            }
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT date_bin(@bucket, "TimestampUtc", TIMESTAMPTZ '2000-01-03') AS bucket,
+                       SUM("Buy")  FILTER (WHERE "Buy"  IS NOT NULL) AS sum_buy,
+                       COUNT("Buy")  AS buy_count,
+                       SUM("Sell") FILTER (WHERE "Sell" IS NOT NULL) AS sum_sell,
+                       COUNT("Sell") AS sell_count,
+                       COUNT(*)::int   AS samples,
+                       (SELECT MIN("TimestampUtc") FROM "PriceQuotes"
+                          WHERE "ExchangeId" = @eid AND "Pair" = @pair) AS oldest
+                FROM "PriceQuotes"
+                WHERE "ExchangeId" = @eid
+                  AND "Pair" = @pair
+                  AND "TimestampUtc" >= @from{rateFilter}
+                GROUP BY 1
+                ORDER BY 1;
+                """;
+            cmd.Parameters.AddWithValue("bucket", preset.Bucket);
+            cmd.Parameters.AddWithValue("eid", exchangeId);
+            cmd.Parameters.AddWithValue("pair", pair);
+            cmd.Parameters.AddWithValue("from", fromUtc);
+            if (!string.IsNullOrEmpty(rateType))
+                cmd.Parameters.AddWithValue("rateType", rateType);
+
+            return await ReadExchangeHistoryAsync(cmd, pair, preset, ct);
+        }
+    }
+
+    // Runs a prepared exchange-history command and maps its rows to the shared HistoryResult
+    // shape (kept separate so the query above stays focused on just building the SQL).
+    private static async Task<HistoryResult> ReadExchangeHistoryAsync(
+        NpgsqlCommand cmd, string pair, (string Key, TimeSpan Range, TimeSpan Bucket) preset, CancellationToken ct)
+    {
 
         var points = new List<HistoryPoint>();
         DateTimeOffset? oldest = null;

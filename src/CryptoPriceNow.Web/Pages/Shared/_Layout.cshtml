@@ -16,6 +16,18 @@
     {
         <meta name="description" content="@desc" />
     }
+    @{
+        // Canonical URL: always the clearnet apex host with a lowercase, query-less path, so
+        // mixed-case links, the .onion host, and any tracking params all consolidate onto one
+        // indexable URL. A page may override via ViewData["Canonical"].
+        var canonicalUrl = ViewData["Canonical"] as string;
+        if (string.IsNullOrEmpty(canonicalUrl))
+        {
+            var canonicalPath = (Context.Request.Path.Value ?? "/").ToLowerInvariant();
+            canonicalUrl = "https://moneropricenow.com" + canonicalPath;
+        }
+    }
+    <link rel="canonical" href="@canonicalUrl" />
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/css/moneropricenow-2026-05-30.css" asp-append-version="true" />
 </head>

@@ -81,6 +81,24 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Force lowercase URLs: 301-redirect any request whose PATH contains uppercase letters to
+// the all-lowercase form (query string preserved verbatim — values like pair=XMR/USDT:Tron
+// stay untouched). This keeps a single canonical casing per URL so mixed-case inbound links
+// don't spawn duplicate pages. Static assets (paths with a file extension) are skipped.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (!string.IsNullOrEmpty(path)
+        && !System.IO.Path.HasExtension(path)
+        && path.Any(char.IsUpper))
+    {
+        context.Response.Redirect(path.ToLowerInvariant() + context.Request.QueryString, permanent: true);
+        return;
+    }
+
+    await next();
+});
+
 var disableHttpsRedirect = builder.Configuration.GetValue<bool>("DisableHttpsRedirect");
 
 if (!app.Environment.IsDevelopment())

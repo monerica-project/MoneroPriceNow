@@ -13,7 +13,10 @@
 
 <link rel="stylesheet" href="~/css/pricechart.css" asp-append-version="true" />
 <style>
-    .ex-page-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem .9rem; margin:.4rem 0 .3rem; }
+    .ex-back { margin:.4rem 0 .1rem; font-size:.85rem; }
+    .ex-back a { color:var(--xmr-orange); text-decoration:none; }
+    .ex-back a:hover { text-decoration:underline; }
+    .ex-page-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem .9rem; margin:.2rem 0 .3rem; }
     .ex-page-head h1 { margin:0; font-size:1.6rem; }
     .ex-links { margin:.2rem 0 1rem; display:flex; flex-wrap:wrap; gap:.5rem .9rem; align-items:center; }
     .ex-links a { color:var(--xmr-orange); text-decoration:none; }
@@ -48,6 +51,8 @@
         background:rgba(242,104,34,.08); border-radius:4px; }
     .ex-sponsor-note #exSponsorTier { color:var(--text-muted,#8a7a6a); font-weight:400; }
 </style>
+
+<p class="ex-back"><a href="/">&larr; All Monero prices (home)</a></p>
 
 <div class="ex-page-head">
     <h1>@ex.SiteName — Monero (XMR) Price</h1>
