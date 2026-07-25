@@ -18,9 +18,14 @@
     .ex-back a:hover { text-decoration:underline; }
     .ex-page-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem .9rem; margin:.2rem 0 .3rem; }
     .ex-page-head h1 { margin:0; font-size:1.6rem; }
-    .ex-links { margin:.2rem 0 1rem; display:flex; flex-wrap:wrap; gap:.5rem .9rem; align-items:center; }
+    .ex-links { margin:.2rem 0 .7rem; display:flex; flex-wrap:wrap; gap:.5rem .9rem; align-items:center; }
     .ex-links a { color:var(--xmr-orange); text-decoration:none; }
     .ex-links a:hover { text-decoration:underline; }
+    .ex-cta-wrap { margin:.2rem 0 1.2rem; }
+    a.ex-cta { display:inline-block; background:var(--xmr-orange); color:#1a1a1a; font-weight:600;
+        padding:.45rem 1rem; border-radius:8px; text-decoration:none; font-size:.9rem; line-height:1.2;
+        box-shadow:0 1px 5px rgba(242,104,34,.22); transition:background .12s, transform .12s; }
+    a.ex-cta:hover { background:#ff8c3a; text-decoration:none; transform:translateY(-1px); }
     .ex-rate-bar { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin:0 0 .9rem; }
     .ex-rate-toggle { display:inline-flex; border:1px solid var(--border,rgba(242,104,34,.3)); border-radius:999px; overflow:hidden; }
     .ex-rate-btn { background:transparent; border:0; color:var(--text,#e8dfd0); padding:.3rem .9rem; cursor:pointer; font-size:.85rem; }
@@ -70,12 +75,14 @@
 
 <div class="ex-links">
     <a href="@Model.MonericaUrl" target="_blank" rel="noopener">View @ex.SiteName on Monerica&#39;s directory &rarr;</a>
-    @if (!string.IsNullOrEmpty(ex.SiteUrl))
-    {
-        <span>·</span>
-        <a id="exOutLink" href="@ex.SiteUrl" target="_blank" rel="noopener sponsored">Go to @ex.SiteName &#8599;</a>
-    }
 </div>
+
+@if (!string.IsNullOrEmpty(ex.SiteUrl))
+{
+    <div class="ex-cta-wrap">
+        <a id="exOutLink" class="ex-cta" href="@ex.SiteUrl" target="_blank" rel="noopener sponsored">Go to @ex.SiteName to swap &#8599;</a>
+    </div>
+}
 
 @if (priced.Count == 0)
 {

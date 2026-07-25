@@ -10,11 +10,13 @@ set -euo pipefail
 
 SKIP_BUILD=0
 SKIP_SSL=0
+FORCE_NGINX=0
 for arg in "$@"; do
     case "$arg" in
         --skip-build) SKIP_BUILD=1 ;;
         --no-ssl)     SKIP_SSL=1 ;;
         --ssl)        : ;;  # accepted for backward compat (now default)
+        --nginx)      FORCE_NGINX=1 ;;  # force-rewrite the nginx vhost + re-run certbot
         -h|--help)    sed -n '2,9p' "$0"; exit 0 ;;
         *)            echo "Unknown flag: $arg" >&2; exit 1 ;;
     esac
@@ -203,6 +205,23 @@ scp "$MAINT_FILE" "$VPS:/tmp/maintenance.html"
 ssh "$VPS" "sudo mv /tmp/maintenance.html $MAINT_DIR/maintenance.html && sudo chmod 644 $MAINT_DIR/maintenance.html"
 ok "Maintenance page installed at $MAINT_DIR"
 
+# ---- Nginx / TLS (only when needed) ----------------------------------------
+# A routine code deploy must NOT touch nginx. The old flow rewrote the vhost as
+# HTTP-only and relied on certbot to re-add the 443 block afterwards — leaving a
+# few-second window with no HTTPS vhost, during which requests fell through to
+# nginx's default server (another site). We now (re)configure nginx ONLY when the
+# SSL vhost isn't already present, or when --nginx is passed. Steady-state deploys
+# leave the working vhost untouched: no gap, no certbot churn.
+NEED_NGINX=1
+if (( ! FORCE_NGINX )) \
+   && ssh "$VPS" "sudo grep -qs 'listen 443 ssl' /etc/nginx/sites-enabled/$APP_NAME.conf \
+        && sudo grep -qs 'server_name .*$DOMAIN' /etc/nginx/sites-enabled/$APP_NAME.conf"; then
+    NEED_NGINX=0
+    ok "nginx vhost for $DOMAIN already configured (443 SSL present) — leaving it untouched (use --nginx to force)"
+fi
+
+if (( NEED_NGINX )); then
+
 # ---- Nginx config ----------------------------------------------------------
 step "Installing nginx config for $DOMAIN"
 NGINX_FILE="$TMP/$APP_NAME.conf"
@@ -338,6 +357,8 @@ print("www-redirect: inserted %d block(s)" % len(ins))
 PYEOF
     ssh "$VPS" "sudo nginx -t && sudo systemctl reload nginx" && ok "www -> apex enforced"
 fi
+
+fi  # end: NEED_NGINX
 
 # ---- Smoke test ------------------------------------------------------------
 PROTO="http://"

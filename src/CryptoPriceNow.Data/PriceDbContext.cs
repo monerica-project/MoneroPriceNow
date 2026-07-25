@@ -43,9 +43,17 @@ public sealed class PriceDbContext : DbContext
             e.HasIndex(x => new { x.ExchangeId, x.TimestampUtc });
 
             // Per-exchange, per-pair charting (/exchange/{name} and /api/history?exchange=).
-            // The exact predicate is (ExchangeId, Pair, TimestampUtc >= from); without this
-            // composite the planner falls back to a broader index and over-scans.
+            // The exact predicate is (ExchangeId, Pair, TimestampUtc >= from); kept because it
+            // also makes the "oldest quote" MIN(TimestampUtc) an instant index probe.
             e.HasIndex(x => new { x.ExchangeId, x.Pair, x.TimestampUtc });
+
+            // COVERING index for the per-exchange chart aggregation. The chart filters
+            // (ExchangeId, Pair, RateType, TimestampUtc >= from) and sums Buy/Sell. Without
+            // Buy/Sell in the index the 30-day query did ~60k random heap fetches (~660ms);
+            // INCLUDE(Buy, Sell) makes it an index-only scan (~200ms). RateType is in the key
+            // because the exchange page always charts one rate type at a time.
+            e.HasIndex(x => new { x.ExchangeId, x.Pair, x.RateType, x.TimestampUtc })
+                .IncludeProperties(x => new { x.Buy, x.Sell });
 
             // Retention pruning: DELETE WHERE TimestampUtc < cutoff
             e.HasIndex(x => x.TimestampUtc);
