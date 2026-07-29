@@ -167,6 +167,7 @@ public sealed class PriceService : IPriceService
         "changenow", "fixedfloat", "exolix", "stealthex", "simpleswap", "trocador", "letsexchange",
         "0trace", "swapuz", "changee", "swapgate", "bitania", "quickex", "pegasusswap", "sageswap",
         "swapzone", // aggregator supports rateType=fixed (client maps query.Fixed → fixed)
+        "elcapo",   // supports rate_type=fixed on /api/partner/rate (client maps query.Fixed → fixed)
         "explace",  // supports details.type=fix (client maps query.Fixed → fix)
         "ccecash",  // supports exchange_mode=fixed on /calculate (client maps query.Fixed → fixed)
         "etzswap",  // supports rateType=fixed on /deposit/public/rate (client maps query.Fixed → fixed)
