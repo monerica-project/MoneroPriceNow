@@ -101,8 +101,8 @@ public sealed class ExchangeModel : PageModel
 
         ViewData["Title"] = $"{exchange.SiteName} Monero (XMR) Price — Live Rates & Chart";
         ViewData["Description"] =
-            $"Live Monero (XMR) buy and sell prices on {exchange.SiteName}: real XMR/USD, XMR/BTC and XMR/ETH rates " +
-            $"(floating and fixed), an interactive price chart, and history — the actual prices logged for {exchange.SiteName}.";
+            $"Live Monero (XMR) buy and sell prices on {exchange.SiteName}: real XMR/USD, XMR/BTC and XMR/ETH rates, " +
+            $"an interactive chart, and price history.";
 
         return Page();
     }

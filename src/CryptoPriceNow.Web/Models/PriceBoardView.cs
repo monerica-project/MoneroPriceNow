@@ -114,7 +114,7 @@ public static class PairCatalog
         MinValidPrice = 1m,
         IsUsd = true,
         Title = "Monero Price (XMR) — Live USD Price Today, Chart & History",
-        MetaDescription = "The current Monero price (XMR) in USD, live today: real-time XMR to USD price, 24-hour change, interactive price chart, all-time high, and price history — plus actual buy and sell prices across exchanges.",
+        MetaDescription = "Live Monero price (XMR) in USD: real-time XMR/USD rate, 24-hour change, price chart, all-time high, and real buy and sell prices across exchanges.",
         H1 = "Monero (XMR) Price",
         SeoText = "Track the current <strong>Monero (XMR) price in USD</strong>, updated live today. This page shows the real-time <strong>XMR to USD price</strong>, the 24-hour change, an interactive <strong>price chart</strong>, the <strong>all-time high</strong>, and <strong>price history</strong> — alongside the actual buy and sell prices from exchanges, so you see what a Monero purchase would really cost, not just a mid-market number. Looking for the Monero price right now, the price today, or the current XMR value in dollars? It's all here, and you can switch to XMR/BTC or XMR/ETH using the tabs above.",
         Slug = "", // root

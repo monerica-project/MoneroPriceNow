@@ -23,8 +23,8 @@ public sealed class ExchangesModel : PageModel
 
         ViewData["Title"] = "Monero Exchanges — Live XMR Prices by Exchange";
         ViewData["Description"] =
-            "Every exchange we track live Monero (XMR) prices for. Open any one to see its real " +
-            "XMR/USD, XMR/BTC and XMR/ETH buy and sell prices, an updating chart, and its price history.";
+            "Every exchange we track live Monero (XMR) prices for. Open any to see its real " +
+            "XMR/USD, XMR/BTC and XMR/ETH buy and sell prices, chart, and history.";
     }
 
     public static string Slug(string siteName) => ExchangeSlug.From(siteName);
