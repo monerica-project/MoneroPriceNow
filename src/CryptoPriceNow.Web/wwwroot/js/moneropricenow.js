@@ -443,23 +443,28 @@
     function nameLink(row) {
         const n = esc(row.siteName);
         const sKey = normName(row.siteName);
-        const outHref = sponsorLinks.has(sKey)
+        const isSponsor = sponsorLinks.has(sKey);
+        const outHref = isSponsor
             ? esc(sponsorLinks.get(sKey))
             : row.siteUrl ? esc(row.siteUrl) : null;
+
+        // A paid Monerica sponsor gets a clean dofollow link; a plain affiliate link is
+        // nofollow (+sponsored) so search engines don't treat the payout URLs as spam.
+        const outRel = isSponsor ? 'noopener' : 'nofollow noopener sponsored';
 
         const slug = exchangeSlug(row.siteName);
         const pageHref = slug ? `/exchange/${slug}` : null;
 
         if (pageHref) {
             const arrow = outHref
-                ? ` <a class="ex-out" href="${outHref}" target="_blank" rel="noopener sponsored" title="Open ${n} to swap" aria-label="Open ${n} swap site in a new tab">&#8599;</a>`
+                ? ` <a class="ex-out" href="${outHref}" target="_blank" rel="${outRel}" title="Open ${n} to swap" aria-label="Open ${n} swap site in a new tab">&#8599;</a>`
                 : '';
             return `<span class="ex-name-wrap"><a class="ex-name" href="${pageHref}" title="${n} prices &amp; chart">${n}</a>${arrow}</span>`;
         }
 
         // No slug (shouldn't happen): fall back to the name linking straight to the swap page.
         return outHref
-            ? `<a class="ex-name" href="${outHref}" target="_blank" rel="noopener sponsored">${n}</a>`
+            ? `<a class="ex-name" href="${outHref}" target="_blank" rel="${outRel}">${n}</a>`
             : `<span class="ex-name">${n}</span>`;
     }
 

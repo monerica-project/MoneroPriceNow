@@ -1,0 +1,165 @@
+@page "/nojs"
+@model CryptoPriceNow.Pages.NoJsModel
+@using CryptoPriceNow.Web.Models
+@{
+    Layout = null;
+    string Fmt(decimal? d) => d.HasValue ? "$" + d.Value.ToString("N2") : "—";
+    decimal? Spread(TwoWayPriceRow r) => (r.Buy is decimal b && r.Sell is decimal s && b + s > 0)
+        ? System.Math.Abs(b - s) / ((b + s) / 2m) * 100m
+        : (decimal?)null;
+    // Privacy grade for the exchange, taken straight from the settings (PrivacyLevel: A/B/C).
+    (string Letter, string Css) Privacy(char? p)
+    {
+        if (!p.HasValue) { return ("—", string.Empty); }
+        var c = char.ToUpperInvariant(p.Value);
+        return (c.ToString(), "g-" + char.ToLowerInvariant(c));
+    }
+}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="60" />
+    <meta name="robots" content="noindex, follow" />
+    <title>Monero (XMR) Price — No-JavaScript Version | MoneroPriceNow</title>
+    <style>
+        :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --fg:#e7e9ee; --muted:#9aa4b2; --orange:#ff7a1a; }
+        * { box-sizing:border-box; }
+        body { margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.5; }
+        a { color:var(--orange); text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .wrap { max-width:820px; margin:0 auto; padding:18px 16px 48px; }
+        .top { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:16px; }
+        .brand { font-weight:800; font-size:1.15rem; color:#fff; }
+        .brand span { color:var(--orange); }
+        .headline { font-size:2.2rem; font-weight:800; margin:8px 0 2px; }
+        .headline small { font-size:.9rem; color:var(--muted); font-weight:600; }
+        .note { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:.85rem; color:var(--muted); margin:0 0 18px; }
+        h2 { font-size:1.05rem; margin:22px 0 8px; }
+        table { width:100%; border-collapse:collapse; font-size:.92rem; }
+        th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); }
+        th { color:var(--muted); font-weight:600; font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; }
+        td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+        tr.sponsor td { background:rgba(255,122,26,.09); }
+        tr.sponsor td:first-child { border-left:3px solid var(--orange); }
+        .badge { display:inline-block; font-size:.66rem; font-weight:800; text-transform:uppercase; letter-spacing:.03em; color:#111; background:var(--orange); border-radius:999px; padding:1px 7px; margin-left:6px; vertical-align:middle; }
+        .grade { display:inline-block; min-width:1.7em; text-align:center; font-weight:800; border-radius:6px; padding:1px 7px; }
+        .g-a { color:#0f1115; background:#39d353; }
+        .g-b { color:#0f1115; background:#9be15a; }
+        .g-c { color:#0f1115; background:#f0c419; }
+        .g-d { color:#0f1115; background:#f5883c; }
+        .g-f { color:#fff; background:#e3524b; }
+        .spon { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; }
+        .spon a { display:block; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; color:var(--fg); }
+        .spon a:hover { border-color:var(--orange); text-decoration:none; }
+        .spon .n { font-weight:700; color:var(--orange); }
+        .spon .d { font-size:.82rem; color:var(--muted); margin-top:3px; }
+        .foot { margin-top:26px; padding-top:14px; border-top:1px solid var(--line); font-size:.8rem; color:var(--muted); }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="top">
+            <span class="brand"><span>Monero</span>PriceNow</span>
+            <span style="color:var(--muted);font-size:.85rem;">No-JavaScript version</span>
+            <span style="flex:1"></span>
+            <a href="/">← Full site (live updates)</a>
+        </div>
+
+        <div class="headline">
+            @if (Model.MidUsdt.HasValue) { @($"XMR ≈ ${Model.MidUsdt.Value:N2}") } else { <text>XMR price unavailable</text> }
+            <small>USDT · mid of buy/sell</small>
+        </div>
+        <p class="note">
+            This page works without JavaScript. It <strong>auto-refreshes every 60 seconds</strong> to update the price
+            (or press reload). For live, continuously-updating prices and charts, use the
+            <a href="/">full site</a>.
+        </p>
+
+        @{
+            // One row per exchange (the feed has separate float/fixed rows), dropping any
+            // that are blank on BOTH buy and sell. Keep the row with the most data / tightest spread.
+            var rows = Model.Rows
+                .Where(r => r.Buy.HasValue || r.Sell.HasValue)
+                .GroupBy(r => r.Exchange, System.StringComparer.OrdinalIgnoreCase)
+                .Select(g => g
+                    .OrderByDescending(r => (r.Buy.HasValue && r.Sell.HasValue) ? 1 : 0)
+                    .ThenBy(r => Spread(r) ?? decimal.MaxValue)
+                    .First())
+                .OrderBy(r => Spread(r) ?? decimal.MaxValue)
+                .ToList();
+        }
+        <h2>XMR / USDT across exchanges <span style="font-size:.72rem;color:var(--muted);font-weight:400;">— sorted by spread (tightest first)</span></h2>
+        @if (rows.Count == 0)
+        {
+            <p class="note">Prices are temporarily unavailable — please refresh in a moment.</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th>Exchange</th>
+                        <th class="num">Privacy</th>
+                        <th class="num">Buy XMR</th>
+                        <th class="num">Sell XMR</th>
+                        <th class="num">Spread</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in rows)
+                    {
+                        var sp = Model.SponsorFor(r.SiteName);
+                        var spread = Spread(r);
+                        var pv = Privacy(r.PrivacyLevel);
+                        <tr class="@(sp != null ? "sponsor" : null)">
+                            <td>
+                                @if (sp != null && !string.IsNullOrWhiteSpace(sp.Link))
+                                {
+                                    @* Sponsor: plain link, no affiliate/referral tracking. *@
+                                    <a href="@sp.Link" target="_blank" rel="noopener">@r.SiteName</a>
+                                    <span class="badge">Sponsor</span>
+                                }
+                                else if (!string.IsNullOrWhiteSpace(r.SiteUrl))
+                                {
+                                    <a href="@r.SiteUrl" target="_blank" rel="nofollow noopener sponsored">@r.SiteName</a>
+                                }
+                                else
+                                {
+                                    @r.SiteName
+                                }
+                            </td>
+                            <td class="num"><span class="grade @pv.Css">@pv.Letter</span></td>
+                            <td class="num">@Fmt(r.Buy)</td>
+                            <td class="num">@Fmt(r.Sell)</td>
+                            <td class="num">@(spread.HasValue ? spread.Value.ToString("0.0") + "%" : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @if (Model.MainSponsors.Count > 0)
+        {
+            <h2>Main sponsors</h2>
+            <div class="spon">
+                @foreach (var s in Model.MainSponsors)
+                {
+                    <a href="@s.Link" target="_blank" rel="noopener sponsored">
+                        <span class="n">@s.Name</span>
+                        @if (!string.IsNullOrWhiteSpace(s.Description))
+                        {
+                            <span class="d">@(s.Description!.Length > 110 ? s.Description!.Substring(0, 110) + "…" : s.Description)</span>
+                        }
+                    </a>
+                }
+            </div>
+        }
+
+        <div class="foot">
+            Prices as of @Model.AsOfUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'") · auto-refreshes every 60s ·
+            <a href="/">MoneroPriceNow full site</a>
+        </div>
+    </div>
+</body>
+</html>

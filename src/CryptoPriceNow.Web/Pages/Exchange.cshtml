@@ -80,7 +80,7 @@
 @if (!string.IsNullOrEmpty(ex.SiteUrl))
 {
     <div class="ex-cta-wrap">
-        <a id="exOutLink" class="ex-cta" href="@ex.SiteUrl" target="_blank" rel="noopener sponsored">Go to @ex.SiteName to swap &#8599;</a>
+        <a id="exOutLink" class="ex-cta" href="@ex.SiteUrl" target="_blank" rel="nofollow noopener sponsored">Go to @ex.SiteName to swap &#8599;</a>
     </div>
 }
 
@@ -224,9 +224,9 @@ else
             ]
         };
     </script>
-    <script src="~/lib/chartjs/chart.umd.min.js" asp-append-version="true"></script>
-    <script src="~/js/pricechart.js" asp-append-version="true"></script>
-    <script src="~/js/exchangepage.js" asp-append-version="true"></script>
+    <script src="~/lib/chartjs/chart.umd.min.js" asp-append-version="true" defer></script>
+    <script src="~/js/pricechart.js" asp-append-version="true" defer></script>
+    <script src="~/js/exchangepage.js" asp-append-version="true" defer></script>
 }
 
 <p style="margin-top:1.6rem;">

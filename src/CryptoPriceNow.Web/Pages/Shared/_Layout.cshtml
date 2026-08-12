@@ -32,6 +32,12 @@
     <link rel="stylesheet" href="~/css/moneropricenow-2026-05-30.css" asp-append-version="true" />
 </head>
 <body>
+    <noscript>
+        <div style="background:#ff7a1a;color:#111;text-align:center;padding:8px 12px;font-size:.9rem;font-weight:600;">
+            JavaScript is off, so live prices and charts won't load here. &rarr;
+            <a href="/nojs" style="color:#111;text-decoration:underline;">Open the no-JavaScript version</a>
+        </div>
+    </noscript>
 <!-- ── Sponsor bar ── -->
     <div class="sponsor-bar">
         <span class="sb-label">Sponsors</span>
@@ -54,6 +60,7 @@
             <a href="~/about">About</a> |
             <a href="~/network">Network</a> |
             <a href="~/sponsors">Sponsors</a> |
+            <a href="~/nojs">No-JS version</a> |
             <a href="https://github.com/monerica-project/MoneroPriceNow" target="_blank">Code</a> |
             <a href="~/contact">Contact</a>
             @if (hasDonation)
@@ -67,10 +74,10 @@
         </span>
     </footer>
 
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/jquery/dist/jquery.min.js" defer></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js" defer></script>
     <!-- Sponsor bar on every page (the homepage script no longer renders it). -->
-    <script src="~/js/sponsorbar.js" asp-append-version="true"></script>
+    <script src="~/js/sponsorbar.js" asp-append-version="true" defer></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

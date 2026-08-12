@@ -116,6 +116,31 @@ public sealed class PriceService : IPriceService
             .Where(t => t.genuine)
             .Select(t => t.row);
         var rows = floatRows.Concat(fixedRows).ToList();
+
+        // Resilience: if an exchange returned NOTHING this cycle (both sides null — e.g. a
+        // Tor-routed source like Quickex whose call occasionally exceeds the per-exchange
+        // timeout), carry forward its previous quote as long as it's still fresh. The old
+        // TsUtc is kept, so the board honestly shows how stale that row is instead of flapping
+        // to "--" on a single slow cycle.
+        if (latestRows.TryGetValue(PairKey(baseRef, quoteRef), out var prevSnapshot) && prevSnapshot.Count > 0)
+        {
+            static string LastGoodKey(TwoWayPriceRow r) => $"{r.Exchange}|{r.RateType}".ToLowerInvariant();
+            var now = DateTimeOffset.UtcNow;
+            var prevByKey = prevSnapshot
+                .Where(r => r.Sell is not null || r.Buy is not null)
+                .GroupBy(LastGoodKey, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+            rows = rows
+                .Select(r =>
+                    r.Sell is null && r.Buy is null
+                    && prevByKey.TryGetValue(LastGoodKey(r), out var old)
+                    && old.TsUtc is DateTimeOffset ts && now - ts < LastGoodStaleWindow
+                        ? old
+                        : r)
+                .ToList();
+        }
+
         latestRows[PairKey(baseRef, quoteRef)] = rows;
 
         // Hand the snapshot to the quote logger. EnqueueAsync only writes to an
@@ -175,6 +200,12 @@ public sealed class PriceService : IPriceService
     };
 
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
+
+    // How long a previous quote may be carried forward when an exchange returns nothing on a
+    // refresh cycle (see RefreshAndStoreAsync). Long enough to ride out an intermittently slow
+    // source (Tor-routed Quickex times out ~20% of cycles), short enough that a truly-down
+    // exchange still drops off before its price is meaningfully stale.
+    private static readonly TimeSpan LastGoodStaleWindow = TimeSpan.FromMinutes(20);
 
     // A min-amount below ~$1 is not a real USD minimum: it's either 0 ("unknown") or a value the
     // client returned in the QUOTE currency (e.g. 0.0001147 BTC) instead of USD. Crypto-swap
