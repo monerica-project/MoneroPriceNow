@@ -29,6 +29,7 @@ public sealed class PriceHistoryService
         ("3d",  TimeSpan.FromDays(3),     TimeSpan.FromHours(1)),
         ("7d",  TimeSpan.FromDays(7),     TimeSpan.FromHours(2)),
         ("30d", TimeSpan.FromDays(30),    TimeSpan.FromHours(8)),
+        ("90d", TimeSpan.FromDays(90),    TimeSpan.FromDays(1)),
     ];
 
     public static bool TryGetPreset(string? key, out (string Key, TimeSpan Range, TimeSpan Bucket) preset)
