@@ -30,6 +30,11 @@ builder.Services.Configure<NetworkFeeOptions>(builder.Configuration.GetSection("
 builder.Services.AddSingleton<INetworkFeeService, NetworkFeeService>();
 builder.Services.AddHostedService<NetworkFeeWarmingService>();
 
+// Publishes the public price API (xmr-usdt.json, xmr-btc.json, xmr-eth.json + index.html)
+// to Bunny Edge Storage every 30s, so api.moneropricenow.com is served by the CDN and never
+// hits this web server. No-op unless Bunny:StorageKey is configured (server-side only).
+builder.Services.AddHostedService<BunnyPricePublisher>();
+
 var app = builder.Build();
 
 // ── Database migration on startup ────────────────────────────────────────────
