@@ -204,73 +204,11 @@ app.MapGet("/api/prices/two-way", async (
     return Results.Ok(rows);
 });
 
-// ── Headline XMR price (/api/price/xmr-usdt.json) ─────────────────────────────
-// A single market price for external consumers (e.g. monerouserforum.com). Reduces
-// the live two-way exchange rows to one mid value (mean of all buy+sell quotes, the
-// same "market" number the board's JS shows) and memoizes it for 15s so this is cheap
-// and never hammers the exchanges. Shape: {"priceUsdt":164.23,"asOfUtc":"...","source":"..."}
-var _xmrPriceCache = string.Empty;
-var _xmrPriceCachedAt = DateTime.MinValue;
-var _xmrPriceTtl = TimeSpan.FromSeconds(15);
-var _xmrPriceLock = new SemaphoreSlim(1, 1);
-
-app.MapGet("/api/price/xmr-usdt.json", async (
-    [FromServices] IPriceService prices, HttpResponse response, CancellationToken ct) =>
-{
-    response.Headers["Cache-Control"] = "public, max-age=15";
-
-    if (!string.IsNullOrEmpty(_xmrPriceCache) && DateTime.UtcNow - _xmrPriceCachedAt < _xmrPriceTtl)
-    {
-        return Results.Content(_xmrPriceCache, "application/json");
-    }
-
-    await _xmrPriceLock.WaitAsync(ct);
-    try
-    {
-        if (!string.IsNullOrEmpty(_xmrPriceCache) && DateTime.UtcNow - _xmrPriceCachedAt < _xmrPriceTtl)
-        {
-            return Results.Content(_xmrPriceCache, "application/json");
-        }
-
-        var rows = await prices.GetTwoWayPricesAsync("XMR", "USDTTRC", ct);
-        var vals = new List<decimal>();
-        DateTimeOffset? maxTs = null;
-        foreach (var r in rows)
-        {
-            if (r.Sell is decimal s && s > 0m) { vals.Add(s); }
-            if (r.Buy is decimal b && b > 0m) { vals.Add(b); }
-            if (r.TsUtc is DateTimeOffset t && (maxTs is null || t > maxTs)) { maxTs = t; }
-        }
-
-        string json;
-        if (vals.Count == 0)
-        {
-            json = "{\"priceUsdt\":null,\"asOfUtc\":null,\"source\":\"moneropricenow.com\"}";
-        }
-        else
-        {
-            var mid = Math.Round(vals.Average(), 2, MidpointRounding.AwayFromZero);
-            var asOf = (maxTs ?? DateTimeOffset.UtcNow).UtcDateTime;
-            json = "{\"priceUsdt\":" + mid.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
-                 + ",\"asOfUtc\":\"" + asOf.ToString("yyyy-MM-ddTHH:mm:ssZ") + "\""
-                 + ",\"source\":\"moneropricenow.com\"}";
-            _xmrPriceCache = json;
-            _xmrPriceCachedAt = DateTime.UtcNow;
-        }
-
-        return Results.Content(json, "application/json");
-    }
-    catch
-    {
-        return Results.Content(
-            string.IsNullOrEmpty(_xmrPriceCache) ? "{\"priceUsdt\":null,\"asOfUtc\":null,\"source\":\"moneropricenow.com\"}" : _xmrPriceCache,
-            "application/json");
-    }
-    finally
-    {
-        _xmrPriceLock.Release();
-    }
-});
+// ── Headline XMR price — MOVED to the CDN ────────────────────────────────────
+// The public XMR price API is now served entirely from Bunny at
+// https://api.moneropricenow.com/xmr-usdt.json (see BunnyPricePublisher), so it never
+// hits this web server. The old in-app endpoint /api/price/xmr-usdt.json was removed and
+// now returns 404 — external consumers should use api.moneropricenow.com.
 
 // ── Price history (/api/history) ─────────────────────────────────────────────
 // Bucketed buy/sell/market averages for the chart. range = one of the presets
