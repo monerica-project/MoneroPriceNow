@@ -27,10 +27,14 @@ public abstract class PriceBoardPageModelBase : PageModel
     /// <summary>Current on-chain fee for this page's network (null if unavailable).</summary>
     public NetworkFee? NetworkFee { get; private set; }
 
+    /// <summary>"float" (default) or "fixed" — set by the subclass; drives the board's rate view.</summary>
+    public string RateType { get; protected set; } = "float";
+
     public async Task LoadAsync(CancellationToken ct)
     {
         ViewData["Title"] = Pair.Title;
         ViewData["Description"] = Pair.MetaDescription;
+        ViewData["RateType"] = RateType;
 
         try
         {

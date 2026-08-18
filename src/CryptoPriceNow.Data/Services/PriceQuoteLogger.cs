@@ -130,8 +130,11 @@ public sealed class PriceQuoteLogger : BackgroundService, IPriceQuoteSink
             // 1) Ensure the exchange exists in the registry (self-registration)
             var ex = await EnsureExchangeAsync(db, row, now, ct);
 
-            // 2) Skip rows with no price at all (exchange errored / pair unsupported)
-            if (row.Buy is null && row.Sell is null) continue;
+            // 2) Only log two-sided quotes. A one-sided quote (buy XOR sell) would skew the
+            //    historical buy/sell/market lines toward whichever side is present, so we drop it
+            //    until the exchange quotes both sides again — matching how the live board/mid
+            //    hides one-sided exchanges.
+            if (row.Buy is null || row.Sell is null) continue;
 
             var ts = (row.QuoteTsUtc ?? snapshot.CapturedUtc).ToUniversalTime();
 

@@ -91,6 +91,9 @@ public sealed record PriceBoardView
 
     /// <summary>Relative URL for this page ("/" for root).</summary>
     public string Url => string.IsNullOrEmpty(Slug) ? "/" : "/" + Slug;
+
+    /// <summary>Relative URL for this pair's fixed-rate page ("/fixed" for the root pair).</summary>
+    public string FixedUrl => string.IsNullOrEmpty(Slug) ? "/fixed" : "/fixed/" + Slug;
 }
 
 /// <summary>

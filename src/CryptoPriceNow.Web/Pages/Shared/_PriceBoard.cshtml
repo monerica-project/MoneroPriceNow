@@ -174,9 +174,10 @@
     .rate-toggle button[disabled] { opacity:.45; cursor:not-allowed; }
 </style>
 <div class="rate-type-bar">
+    @{ var rateView = ViewData["RateType"] as string ?? "float"; }
     <div class="rate-toggle" role="group" aria-label="Rate type">
-        <button type="button" class="chart-range-btn chart-range-active" data-rate="float">Float</button>
-        <button type="button" class="chart-range-btn" data-rate="fixed">Fixed</button>
+        <a class="chart-range-btn@(rateView == "float" ? " chart-range-active" : "")" href="@Model.Url">Float</a>
+        <a class="chart-range-btn@(rateView == "fixed" ? " chart-range-active" : "")" href="@Model.FixedUrl">Fixed</a>
     </div>
     <p class="rate-type-note">
         <strong>Float</strong> (default) rates can shift slightly between the quote and settlement — how most
@@ -336,6 +337,10 @@
 }
 
 <script>
+    // Rate view for this page (float default, or fixed on /fixed pages) — read by the table
+    // filter in moneropricenow.js and the history fetch in pricechart.js.
+    window.__RATE_TYPE__ = "@(ViewData["RateType"] as string ?? "float")";
+
     // Per-page pair config — read by moneropricenow.js and pricechart.js.
     window.__PAIR__ = {
         base: "@Model.Base",

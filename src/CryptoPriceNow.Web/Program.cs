@@ -140,6 +140,10 @@ app.MapGet("/sitemap.xml", async (HttpContext http, CancellationToken ct) =>
     foreach (var p in PairCatalog.All)
         entries.Add((origin + p.Url, "hourly", string.IsNullOrEmpty(p.Slug) ? "1.0" : "0.9"));
 
+    // Fixed-rate page for every pair (/fixed, /fixed/xmr-btc, …).
+    foreach (var p in PairCatalog.All)
+        entries.Add((origin + p.FixedUrl, "hourly", "0.8"));
+
     // The browsable exchange index and one page per active exchange (slug from its name).
     var directory = http.RequestServices.GetService<CryptoPriceNow.Data.Services.ExchangeDirectoryService>();
     if (directory is not null)

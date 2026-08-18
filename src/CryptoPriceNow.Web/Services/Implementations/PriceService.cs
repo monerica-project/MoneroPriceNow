@@ -171,16 +171,22 @@ public sealed class PriceService : IPriceService
         AssetRef baseRef, AssetRef quoteRef, CancellationToken ct = default)
         => GetTwoWayPricesInternalAsync(baseRef, quoteRef, ct);
 
-    private Task<IReadOnlyList<TwoWayPriceRow>> GetTwoWayPricesInternalAsync(
+    private async Task<IReadOnlyList<TwoWayPriceRow>> GetTwoWayPricesInternalAsync(
         AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
     {
-        // Fast path: warmer has already built a snapshot — return it instantly
-        if (latestRows.TryGetValue(PairKey(baseRef, quoteRef), out var cached))
-            return Task.FromResult(cached);
+        // Fast path: warmer has already built a snapshot. Cold start only (first request before
+        // the warmer has finished its first run) fetches live float-only rows.
+        var rows = latestRows.TryGetValue(PairKey(baseRef, quoteRef), out var cached)
+            ? cached
+            : await FetchLiveAsync(baseRef, quoteRef, fixedRate: false, ct);
 
-        // Cold start only (first request before warmer has finished its first run) — float only;
-        // the fixed rows appear once the warmer has run its dual-pass.
-        return FetchLiveAsync(baseRef, quoteRef, fixedRate: false, ct);
+        // Only surface exchanges quoting BOTH sides. A one-sided quote (buy XOR sell, incl. a
+        // side nulled by Positive()) would skew the market mid toward whichever side is present
+        // and clutter the comparison list, so the row is hidden until both sides come back. This
+        // is applied at the single read path, so it holds EVERYWHERE the price is used — the
+        // board, the mid/hero price, the /api and CDN feeds, and the per-exchange page. The raw
+        // cache still keeps one-sided rows for carry-forward resilience and history logging.
+        return rows.Where(r => r.Buy is not null && r.Sell is not null).ToList();
     }
 
     // ── Live fetch (calls exchange APIs in parallel, respects per-exchange TTL) 
