@@ -169,6 +169,9 @@
                         bodyColor: COLOR_MUTED,
                         titleFont: { family: FONT_MONO, size: 11 },
                         bodyFont: { family: FONT_MONO, size: 11 },
+                        // Order tooltip rows by value so they match the lines' vertical
+                        // position: Buy (highest) on top, Market in the middle, Sell (lowest) last.
+                        itemSort: (a, b) => b.parsed.y - a.parsed.y,
                         callbacks: {
                             label: ctx => ` ${ctx.dataset.label}: ${PINFO.symbol}${fmtPrice(ctx.parsed.y)}${PINFO.suffix}`
                         }
