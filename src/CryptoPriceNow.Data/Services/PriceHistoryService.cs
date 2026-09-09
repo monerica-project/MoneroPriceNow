@@ -169,9 +169,13 @@ public sealed class PriceHistoryService
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
                 SELECT date_bin(@bucket, "TimestampUtc", TIMESTAMPTZ '2000-01-03') AS bucket,
-                       SUM("Buy")  FILTER (WHERE "Buy"  IS NOT NULL) AS sum_buy,
+                       -- ROUND the per-bucket sums: raw USDT quotes carry ~15+ fractional digits,
+                       -- so an un-rounded SUM over a bucket can exceed 28-29 significant digits and
+                       -- overflow .NET System.Decimal on GetDecimal() (throwing → chart shows as
+                       -- "no data"). 8 dp is far more precision than any pair's average needs.
+                       ROUND(SUM("Buy")  FILTER (WHERE "Buy"  IS NOT NULL), 8) AS sum_buy,
                        COUNT("Buy")  AS buy_count,
-                       SUM("Sell") FILTER (WHERE "Sell" IS NOT NULL) AS sum_sell,
+                       ROUND(SUM("Sell") FILTER (WHERE "Sell" IS NOT NULL), 8) AS sum_sell,
                        COUNT("Sell") AS sell_count,
                        COUNT(*)::int   AS samples,
                        (SELECT MIN("TimestampUtc") FROM "PriceQuotes"

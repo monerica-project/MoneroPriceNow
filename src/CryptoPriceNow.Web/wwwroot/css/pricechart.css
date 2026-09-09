@@ -59,12 +59,16 @@
     border: 1px solid var(--border, rgba(242,104,34,.16));
     border-radius: 5px;
     cursor: pointer;
+    /* Float/Fixed are rendered as <a>, so kill the default link underline — the
+       color/border change on hover + the active pill are the only affordance wanted. */
+    text-decoration: none;
     transition: color .12s, border-color .12s, background .12s;
 }
 
 .chart-range-btn:hover {
     color: var(--text, #ddd4c4);
     border-color: var(--border-hi, rgba(242,104,34,.38));
+    text-decoration: none;
 }
 
 .chart-range-btn.chart-range-active {

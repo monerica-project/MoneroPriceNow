@@ -133,11 +133,39 @@ public sealed class PriceService : IPriceService
 
             rows = rows
                 .Select(r =>
-                    r.Sell is null && r.Buy is null
-                    && prevByKey.TryGetValue(LastGoodKey(r), out var old)
-                    && old.TsUtc is DateTimeOffset ts && now - ts < LastGoodStaleWindow
-                        ? old
-                        : r)
+                {
+                    // Both sides landed this cycle → nothing to carry.
+                    if (r.Sell is not null && r.Buy is not null) return r;
+
+                    // No fresh last-good within the stale window → leave as-is (a one-sided row
+                    // is still dropped by the both-sides read filter, exactly as before).
+                    if (!prevByKey.TryGetValue(LastGoodKey(r), out var old)
+                        || old.TsUtc is not DateTimeOffset ts
+                        || now - ts >= LastGoodStaleWindow)
+                        return r;
+
+                    // Both sides null this cycle → carry the whole previous row (its old TsUtc is
+                    // kept, so the board honestly shows staleness instead of flapping to "--").
+                    if (r.Sell is null && r.Buy is null) return old;
+
+                    // Only ONE side landed. This is the common failure for the slow
+                    // curl-impersonate exchanges (e.g. xChange: buy and sell are two separate
+                    // shell-outs, and one can exceed the per-exchange timeout on a given cycle).
+                    // Fill just the MISSING side from the last-good quote so the row stays
+                    // two-sided and doesn't flap off the board; drop TsUtc to the older
+                    // contributing timestamp so staleness stays honest.
+                    var filledSell = r.Sell ?? old.Sell;
+                    var filledBuy = r.Buy ?? old.Buy;
+                    if (filledSell is null || filledBuy is null) return r; // old also lacked it
+                    var stamp = (r.TsUtc, old.TsUtc) switch
+                    {
+                        (DateTimeOffset a, DateTimeOffset b) => a < b ? a : b,
+                        (DateTimeOffset a, _) => a,
+                        (_, DateTimeOffset b) => b,
+                        _ => r.TsUtc,
+                    };
+                    return r with { Sell = filledSell, Buy = filledBuy, TsUtc = stamp };
+                })
                 .ToList();
         }
 
@@ -186,7 +214,34 @@ public sealed class PriceService : IPriceService
         // is applied at the single read path, so it holds EVERYWHERE the price is used — the
         // board, the mid/hero price, the /api and CDN feeds, and the per-exchange page. The raw
         // cache still keeps one-sided rows for carry-forward resilience and history logging.
-        return rows.Where(r => r.Buy is not null && r.Sell is not null).ToList();
+        // Sanity-filter the spread so only rows that MAKE SENSE reach the board, the /api + CDN
+        // feeds, and the per-exchange page (single read path, so it holds everywhere):
+        //   • Buy < Sell  → a negative spread (you'd buy XMR cheaper than you could sell it).
+        //     Stale/bad data, not a real arbitrage.
+        //   • spread > MaxSpreadFraction → absurdly wide (real XMR spreads top out ~10-13%; a
+        //     70%+ spread means one side, usually a mis-scaled buy quote, is garbage).
+        // Either way the buy/sell pair is nonsensical, so the row is hidden rather than shown.
+        var maxSpread = this.opt.MaxSpreadFraction;
+        return rows
+            .Where(r => IsSaneTwoWayRow(r.Buy, r.Sell, maxSpread))
+            .ToList();
+    }
+
+    // A two-way quote is "sane" only when both sides are present, the spread is non-negative
+    // (Buy >= Sell) and it isn't absurdly wide (> MaxSpreadFraction). Real XMR spreads top out
+    // ~10-13%, so a 25%+ spread means one side — usually a mis-scaled quote returned by a broken
+    // upstream endpoint (e.g. a buy figure ~500x too high) — is garbage.
+    //
+    // This is the SINGLE definition of "makes sense" and is applied at BOTH the read path (board,
+    // /api + CDN feeds, per-exchange page) AND the history snapshot fed to the quote logger. Sharing
+    // it means the charts can never diverge from the board: one exchange's insane quote is excluded
+    // everywhere, so it can never corrupt the pooled PriceBuckets rollup the charts are built from.
+    internal static bool IsSaneTwoWayRow(decimal? buy, decimal? sell, decimal maxSpread)
+    {
+        if (buy is not decimal b || sell is not decimal s) return false; // both sides required
+        if (b < s) return false;                                         // negative spread → bad/stale
+        if (maxSpread <= 0m || b <= 0m) return true;                     // guard disabled / no divisor
+        return (b - s) / b <= maxSpread;                                 // reject absurdly-wide spreads
     }
 
     // ── Live fetch (calls exchange APIs in parallel, respects per-exchange TTL) 
@@ -203,6 +258,7 @@ public sealed class PriceService : IPriceService
         "ccecash",  // supports exchange_mode=fixed on /calculate (client maps query.Fixed → fixed)
         "etzswap",  // supports rateType=fixed on /deposit/public/rate (client maps query.Fixed → fixed)
         "alfacash", // rate.json returns rate (fixed) + rate_floating; client maps query.Fixed → fixed rate
+        "flashift", // aggregator; getEstimatedAmount returns floating + fixed offers (client maps query.Fixed → fixed)
     };
 
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
@@ -331,7 +387,16 @@ public sealed class PriceService : IPriceService
         AssetRef baseRef, AssetRef quoteRef, IReadOnlyList<TwoWayPriceRow> rows)
     {
         var pair = BuildPairLabel(baseRef, quoteRef);
-        var dtoRows = rows.Select(r => new QuoteRowDto(
+
+        // Only log rows that pass the SAME sanity filter the board/API uses (see
+        // IsSaneTwoWayRow). The history rollup the charts read from must never include a quote
+        // that isn't "live" on the board — otherwise a single exchange returning a mis-scaled
+        // price (e.g. LetsExchange's info-revert buy running ~500x high) corrupts the pooled
+        // average and blows up the charts even though the board correctly hides that exchange.
+        var maxSpread = this.opt.MaxSpreadFraction;
+        var dtoRows = rows
+            .Where(r => IsSaneTwoWayRow(r.Buy, r.Sell, maxSpread))
+            .Select(r => new QuoteRowDto(
             ExchangeKey: r.Exchange,
             SiteName: r.SiteName,
             SiteUrl: r.SiteUrl,
@@ -493,6 +558,7 @@ public sealed class PriceService : IPriceService
             ["octoswap"]    = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
             ["trocador"]    = ["USDT", "BTC", "ETH"], // aggregator; two-way XMR↔BTC/ETH (ETH=ERC20)
             ["xgram"]       = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
+            ["flashift"]    = ["USDT", "BTC", "ETH"], // aggregator; two-way XMR↔BTC/ETH/USDT (USDT=trx/Tron)
 
             // WizardSwap has no USDT listing — it can only price crypto quotes.
             // Restrict it to BTC/ETH so it surfaces on those pages and is skipped

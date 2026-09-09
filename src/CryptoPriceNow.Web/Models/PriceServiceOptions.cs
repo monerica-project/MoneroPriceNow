@@ -22,4 +22,10 @@ public sealed class PriceServiceOptions
     // that can't quote BOTH buy and sell for XMR (this is a two-way price site) —
     // e.g. ChangeHero only lets you SELL Monero, never buy it.
     public string[] ExcludedExchanges { get; set; } = [];
+
+    // Sanity cap on the buy/sell spread. A row whose spread ((Buy-Sell)/Buy) exceeds this
+    // is hidden as nonsensical bad data — real XMR spreads top out around 10-13%, so a 70%+
+    // spread means one side (usually a bad/mis-scaled buy quote) is garbage, not a real price.
+    // Paired with the negative-spread hide (Buy < Sell) so only sane spreads [0, max] show.
+    public decimal MaxSpreadFraction { get; set; } = 0.25m;
 }

@@ -61,13 +61,26 @@
         border-radius: 10px;
         padding: .95rem 1.05rem;
         color: var(--text);
-        transition: border-color .15s ease, transform .15s ease;
+        /* The whole card is one clickable link — never underline it (or its text). */
+        text-decoration: none;
+        cursor: pointer;
+        transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease;
     }
-    .mpn-sponsor:hover {
-        border-color: rgba(242,104,34,.45);
+    /* Hover the card anywhere → highlight the border + a soft glow so it reads clearly as one
+       tappable unit. No underline on the card or any text inside it. */
+    .mpn-sponsor:hover,
+    .mpn-sponsor:focus-visible {
+        border-color: var(--xmr-orange, #F26822);
+        background: rgba(242,104,34,.06);
+        box-shadow: 0 0 0 1px rgba(242,104,34,.35), 0 4px 14px rgba(0,0,0,.25);
         transform: translateY(-1px);
         text-decoration: none;
+        outline: none;
     }
+    .mpn-sponsor:hover .name,
+    .mpn-sponsor:hover .desc,
+    .mpn-sponsor .name,
+    .mpn-sponsor .desc { text-decoration: none; }
     .mpn-sponsor .name {
         font-family: var(--mono);
         font-weight: 600;

@@ -127,14 +127,15 @@ public sealed class PriceQuoteLogger : BackgroundService, IPriceQuoteSink
         {
             if (string.IsNullOrWhiteSpace(row.ExchangeKey)) continue;
 
-            // 1) Ensure the exchange exists in the registry (self-registration)
-            var ex = await EnsureExchangeAsync(db, row, now, ct);
-
-            // 2) Only log two-sided quotes. A one-sided quote (buy XOR sell) would skew the
-            //    historical buy/sell/market lines toward whichever side is present, so we drop it
-            //    until the exchange quotes both sides again — matching how the live board/mid
-            //    hides one-sided exchanges.
+            // 1) Only two-sided quotes count. A one-sided/empty row (buy XOR sell, or both null)
+            //    never appears on the board, so it must NOT register the exchange or refresh its
+            //    LastSeenUtc — otherwise a "ghost" that only ever quotes one side (or nothing)
+            //    shows as currently-active on /exchanges and keeps a live /exchange/{slug} page
+            //    with no data. "Active" = has produced a real two-sided quote within the window.
             if (row.Buy is null || row.Sell is null) continue;
+
+            // 2) Register (self-registration) + refresh LastSeenUtc — only for real two-sided quotes.
+            var ex = await EnsureExchangeAsync(db, row, now, ct);
 
             var ts = (row.QuoteTsUtc ?? snapshot.CapturedUtc).ToUniversalTime();
 
@@ -189,6 +190,14 @@ public sealed class PriceQuoteLogger : BackgroundService, IPriceQuoteSink
             FROM "PriceQuotes"
             WHERE "Pair" = {0}
               AND "TimestampUtc" >= date_bin(INTERVAL '1 minute', {1}::timestamptz, TIMESTAMPTZ '2000-01-03') - INTERVAL '1 minute'
+              -- Only aggregate SANE two-way quotes: both sides present, non-negative spread
+              -- (Buy >= Sell) and not absurdly wide (<= 25%, mirroring PriceServiceOptions
+              -- .MaxSpreadFraction). PriceService already filters these out before logging, so
+              -- this is defense-in-depth: even if a mis-scaled quote (e.g. a buy ~500x too high)
+              -- reached PriceQuotes, it can never pollute the pooled rollup the charts read from.
+              AND "Buy" IS NOT NULL AND "Sell" IS NOT NULL
+              AND "Buy" >= "Sell"
+              AND ("Buy" = 0 OR ("Buy" - "Sell") / "Buy" <= 0.25)
             GROUP BY "Pair", "RateType", bucket
             ON CONFLICT ("Pair", "RateType", "Bucket") DO UPDATE SET
                 "SumBuy"    = EXCLUDED."SumBuy",
