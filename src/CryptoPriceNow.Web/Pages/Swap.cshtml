@@ -1,0 +1,170 @@
+@page "/swap"
+@model CryptoPriceNow.Pages.SwapModel
+@using CryptoPriceNow.Pages
+@using System.Globalization
+@{
+    ViewData["Title"] = $"Swap {Model.FromUpper} → {Model.ToUpper} — Best Monero Swap Rates | MoneroPriceNow";
+    ViewData["Description"] = "Compare live Monero swap rates across every exchange we track. "
+        + "Enter an amount, pick a direction, and click through to swap — one side is always XMR.";
+
+    string Fmt(decimal v, int d) => v.ToString("N" + d, CultureInfo.InvariantCulture);
+    string assetDefault = Model.From switch { "xmr" => "5", "btc" => "0.05", "eth" => "1", "usdt" => "1000", _ => "1" };
+
+    // Reverse link: same asset + amount, flipped direction (carry the quote state so a reverse
+    // after searching re-quotes rather than dropping back to the form).
+    string reverseHref = $"/swap?asset={Model.Asset}&dir={(Model.SellingXmr ? "buy" : "sell")}"
+        + (Model.AmountProvided ? $"&amount={Uri.EscapeDataString(Model.AmountInput)}" : "")
+        + (Model.Quoted ? "&go=1" : "");
+
+    // Network tag is PER-ASSET: BTC and ETH need none (their network is obvious); only USDT is
+    // ambiguous, so it's shown as ERC-20 (Ethereum). Applies to each option individually.
+    string NetFor(string ticker) => ticker == "usdt" ? " (ERC20)" : "";
+    string SideLabel(string ticker) => ticker == "xmr" ? "XMR" : ticker.ToUpperInvariant() + NetFor(ticker);
+}
+
+<link rel="stylesheet" href="~/css/swap.css" asp-append-version="true" />
+
+<div class="swap-wrap">
+    <a class="swap-back" href="/">← Back to live XMR prices</a>
+
+    <div class="swap-head">
+        <h1>Swap Monero</h1>
+        <p>Live rates across every exchange we track — one side is always XMR. Pick an amount and direction, then swap on the exchange.</p>
+    </div>
+
+    <div class="swap-card">
+        <form class="swap-form" method="get" action="/swap" autocomplete="off">
+            <input type="hidden" name="dir" value="@(Model.SellingXmr ? "sell" : "buy")" />
+            <input type="hidden" name="go" value="1" />
+
+            <div class="swap-io">
+                <div class="swap-cell swap-amount-cell">
+                    <label for="swapAmount">Amount</label>
+                    <input id="swapAmount" class="swap-ctrl" name="amount" type="text" inputmode="decimal"
+                           value="@Model.AmountInput" placeholder="@assetDefault" />
+                </div>
+
+                <div class="swap-cell swap-side-cell">
+                    <label>You send</label>
+                    @if (Model.SellingXmr)
+                    {
+                        <div class="swap-ctrl swap-fixed">XMR</div>
+                    }
+                    else
+                    {
+                        <select class="swap-ctrl" name="asset" aria-label="Asset to send">
+                            @foreach (var opt in SwapModel.Assets)
+                            {
+                                <option value="@opt" selected="@(Model.Asset == opt)">@SideLabel(opt)</option>
+                            }
+                        </select>
+                    }
+                </div>
+
+                <a class="swap-reverse" href="@reverseHref" title="Reverse direction" aria-label="Reverse swap direction">⇄</a>
+
+                <div class="swap-cell swap-side-cell">
+                    <label>You get</label>
+                    @if (Model.SellingXmr)
+                    {
+                        <select class="swap-ctrl" name="asset" aria-label="Asset to receive">
+                            @foreach (var opt in SwapModel.Assets)
+                            {
+                                <option value="@opt" selected="@(Model.Asset == opt)">@SideLabel(opt)</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <div class="swap-ctrl swap-fixed">XMR</div>
+                    }
+                </div>
+
+                <button type="submit" class="swap-go">Get quotes</button>
+            </div>
+        </form>
+        <p class="swap-note">Reverse with ⇄. Rates are indicative and may change at execution.</p>
+    </div>
+
+    @if (!Model.Quoted)
+    {
+        <p class="swap-prompt">Enter an amount and hit <strong>Get quotes</strong> to compare exchanges.</p>
+    }
+    else if (Model.Results.Count == 0)
+    {
+        <div class="swap-prompt">
+            <p>No exchange we track is currently quoting <strong>@Model.FromUpper → @Model.ToUpper</strong>.</p>
+            <p>Try the other direction or another asset.</p>
+        </div>
+    }
+    else
+    {
+        <div class="swap-table-wrap">
+            <table class="swap-results">
+                <thead>
+                    <tr>
+                        <th>Exchange</th>
+                        <th>You get (@Model.ToUpper@NetFor(Model.To))</th>
+                        <th class="col-rate">Rate (1 XMR)</th>
+                        <th>Privacy</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var isFirst = true; }
+                    @foreach (var r in Model.Results)
+                    {
+                        var p = r.PrivacyLevel.HasValue ? char.ToUpperInvariant(r.PrivacyLevel.Value).ToString() : null;
+                        var rowClass = (isFirst ? "swap-best " : "") + (r.IsSponsor ? "swap-sponsor" : "");
+                        // Sponsors get a clean link (no affiliate); everyone else is nofollow+sponsored.
+                        var rel = r.IsSponsor ? "noopener" : "nofollow noopener sponsored";
+                        <tr class="@rowClass.Trim()">
+                            <td>
+                                <a class="swap-ex-name" href="@r.MonericaUrl" target="_blank" rel="noopener"
+                                   title="@r.SiteName on Monerica">@r.SiteName</a>
+                                @if (r.IsSponsor)
+                                {
+                                    <span class="swap-badge-sponsor">★ SPONSOR</span>
+                                }
+                            </td>
+                            <td class="swap-get">@Fmt(r.Receive, Model.ReceiveDecimals)</td>
+                            <td class="col-rate">@Fmt(r.PerXmr, Model.Pair.Decimals) @Model.AssetUpper</td>
+                            <td>
+                                @if (p is not null)
+                                {
+                                    <span class="privacy-badge privacy-@p" title="Privacy grade @p">@p</span>
+                                }
+                                else
+                                {
+                                    <span class="swap-muted">—</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(r.OutHref))
+                                {
+                                    <a class="swap-out" href="@r.OutHref" target="_blank" rel="@rel">Swap ↗</a>
+                                }
+                            </td>
+                        </tr>
+                        isFirst = false;
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <p class="swap-disclaimer">
+        <strong>MoneroPriceNow does not hold, custody, or receive funds.</strong>
+        We only compare live rates and link you to the exchange — the swap is carried out by that
+        third party under its own terms.
+    </p>
+</div>
+
+@section Scripts {
+    <script>
+        // Progressive enhancement: submit as soon as the asset is changed (still works without JS).
+        document.querySelectorAll('.swap-form select[name="asset"]').forEach(function (sel) {
+            sel.addEventListener('change', function () { sel.form.submit(); });
+        });
+    </script>
+}

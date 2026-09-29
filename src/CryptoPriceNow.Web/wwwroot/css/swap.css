@@ -1,0 +1,76 @@
+/* Swap feature styles: the /swap rate-finder page and the "Swap" CTA button that sits
+   under the market price on the board pages. Loaded by Pages/Swap.cshtml and, for the
+   button, by Pages/Shared/_PriceBoard.cshtml. */
+
+/* ---- "Swap" CTA button under the market price (board pages) ---------------- */
+.hero-swap-wrap { display: flex; justify-content: center; margin: 6px 0 2px; }
+.hero-swap-btn { display: inline-flex; align-items: center; gap: 8px; padding: .6rem 1.4rem; border-radius: 999px;
+    background: #ff6600; color: #fff; font-weight: 500; font-size: .98rem; letter-spacing: .01em; text-decoration: none;
+    box-shadow: 0 2px 10px rgba(255,102,0,.25); transition: background .15s, transform .15s; }
+.hero-swap-btn:hover { background: #ff7a1f; transform: translateY(-1px); }
+
+/* ---- /swap page ----------------------------------------------------------- */
+.swap-wrap { max-width: 900px; margin: 0 auto; padding: 6px 12px 40px; }
+.swap-back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); text-decoration: none;
+    font-size: .88rem; margin: 6px 0 10px; }
+.swap-back:hover { color: var(--xmr-orange2, #ff8c3a); }
+.swap-head { text-align: center; margin: 4px 0 16px; }
+.swap-head h1 { font-size: 1.5rem; font-weight: 800; margin: 0 0 6px; }
+.swap-head p { color: var(--text-muted); margin: 0; font-size: .95rem; }
+.swap-card { background: var(--bg-card, #16171b); border: 1px solid var(--border-hi, #2a2c33);
+    border-radius: 14px; padding: 16px; margin-bottom: 18px; }
+
+/* Desktop: one compact line — amount · you send · ⇄ · you get · Get quotes. */
+.swap-io { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.swap-cell { display: flex; flex-direction: column; gap: 4px; flex: 1 1 90px; min-width: 84px; }
+.swap-cell label { font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.swap-ctrl { box-sizing: border-box; height: 40px; border-radius: 8px; border: 1px solid var(--border-hi, #2a2c33);
+    background: var(--bg-panel, #101114); color: var(--text, #fff); font-size: .92rem; padding: 0 10px; width: 100%; }
+.swap-fixed { display: flex; align-items: center; justify-content: center; font-weight: 700;
+    background: rgba(255,102,0,.10); border-color: rgba(255,102,0,.45); color: var(--xmr-orange2, #ff8c3a); }
+select.swap-ctrl { cursor: pointer; }
+/* Reverse: same 40px height as the fields so the row lines up. */
+.swap-reverse { flex: 0 0 auto; align-self: flex-end; width: 40px; height: 40px;
+    border-radius: 50%; border: 1px solid var(--border-hi, #2a2c33); background: var(--bg-panel, #101114);
+    color: var(--xmr-orange2, #ff8c3a); font-size: 1.15rem; line-height: 38px; text-align: center;
+    text-decoration: none; transition: transform .15s, border-color .15s; }
+.swap-reverse:hover { transform: rotate(180deg); border-color: var(--xmr-orange2, #ff8c3a); }
+.swap-go { flex: 0 0 auto; align-self: flex-end; height: 40px; padding: 0 18px; border: 0; border-radius: 8px;
+    background: #ff6600; color: #fff; font-weight: 700; font-size: .9rem; cursor: pointer; white-space: nowrap; }
+.swap-go:hover { background: #ff7a1f; }
+.swap-note { color: var(--text-muted); font-size: .78rem; text-align: center; margin: 12px 0 0; }
+
+/* Mobile: stack the send/receive coins (and controls) onto their own lines. */
+@media (max-width: 620px) {
+    .swap-cell { flex: 1 1 100%; }
+    .swap-reverse { align-self: center; transform: rotate(90deg); }
+    .swap-reverse:hover { transform: rotate(270deg); }
+    .swap-go { flex: 1 1 100%; width: 100%; margin-top: 4px; }
+}
+
+.swap-prompt { text-align: center; color: var(--text-muted); padding: 20px 10px; }
+.swap-muted { color: var(--text-muted); }
+.swap-table-wrap { overflow-x: auto; }
+
+.swap-results { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.swap-results th, .swap-results td { padding: 10px 8px; text-align: right; border-bottom: 1px solid var(--border, #23252b); }
+.swap-results th { color: var(--text-muted); font-weight: 600; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+.swap-results th:first-child, .swap-results td:first-child { text-align: left; }
+.swap-results tr:hover { background: rgba(255,255,255,.02); }
+.swap-ex-name { font-weight: 600; color: var(--text, #fff); text-decoration: none; }
+.swap-ex-name:hover { color: var(--xmr-orange2, #ff8c3a); text-decoration: underline; }
+.swap-get { font-weight: 800; color: var(--good, #3ecf8e); font-variant-numeric: tabular-nums; }
+.swap-best td { background: rgba(62,207,142,.06); }
+.swap-best .swap-ex-name::after { content: "★ best rate"; margin-left: 8px; font-size: .66rem; color: var(--good, #3ecf8e); font-weight: 700; }
+.swap-sponsor td { background: rgba(255,102,0,.07); }
+.swap-badge-sponsor { margin-left: 8px; font-size: .64rem; font-weight: 800; letter-spacing: .04em; color: #ff8c3a;
+    border: 1px solid rgba(255,102,0,.5); border-radius: 5px; padding: 1px 5px; }
+.privacy-badge { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 5px; font-size: .78rem; font-weight: 800; text-align: center; }
+.privacy-A { background: rgba(62,207,142,.18); color: #3ecf8e; }
+.privacy-B { background: rgba(120,190,255,.16); color: #7ab7ff; }
+.privacy-C { background: rgba(255,196,0,.16); color: #ffc400; }
+.privacy-V { background: rgba(180,180,190,.16); color: #b4b4be; }
+.swap-out { display: inline-block; padding: 6px 12px; border-radius: 8px; background: #ff6600; color: #fff; font-weight: 700; text-decoration: none; font-size: .85rem; white-space: nowrap; }
+.swap-out:hover { background: #ff7a1f; }
+.swap-disclaimer { color: var(--text-muted); font-size: .8rem; margin: 16px auto 0; max-width: 760px; text-align: center; }
+@media (max-width: 540px) { .swap-results th.col-rate, .swap-results td.col-rate { display: none; } }

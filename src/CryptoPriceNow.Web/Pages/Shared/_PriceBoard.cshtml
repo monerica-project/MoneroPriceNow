@@ -62,6 +62,16 @@
 
 </div>
 
+@{
+    // Preselect this page's asset on the swap page (defaults to Bitcoin → Monero if unknown).
+    var swapFrom = Model.QuoteLabel.ToLowerInvariant();
+}
+<!-- Swap CTA: centered under the market price. Jumps to the swap-rate finder for this pair. -->
+<link rel="stylesheet" href="~/css/swap.css" asp-append-version="true" />
+<div class="hero-swap-wrap">
+    <a class="hero-swap-btn" href="/swap?from=@swapFrom&amp;to=xmr">⇄ Swap XMR / @Model.QuoteLabel</a>
+</div>
+
 <!-- Status bar -->
 <div class="status-bar">
     <div class="pulse-dot"></div>

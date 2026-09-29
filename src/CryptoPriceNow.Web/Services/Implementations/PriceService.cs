@@ -227,6 +227,22 @@ public sealed class PriceService : IPriceService
             .ToList();
     }
 
+    // One-way SELL rows (XMR → quote). Reuses the warmer's probe-sized snapshot (same rates as
+    // the board) but keeps every row that quoted a sell — INCLUDING sell-only venues the two-way
+    // sanity filter would drop — so the /swap page can list xmr2cex et al. when selling XMR.
+    public async Task<IReadOnlyList<TwoWayPriceRow>> GetSellRowsAsync(
+        string @base, string quote, CancellationToken ct = default)
+    {
+        var baseRef = ParseAsset(@base);
+        var quoteRef = ParseAsset(quote);
+
+        var rows = latestRows.TryGetValue(PairKey(baseRef, quoteRef), out var cached)
+            ? cached
+            : await FetchLiveAsync(baseRef, quoteRef, fixedRate: false, ct);
+
+        return rows.Where(r => r.Sell is decimal s && s > 0m).ToList();
+    }
+
     // A two-way quote is "sane" only when both sides are present, the spread is non-negative
     // (Buy >= Sell) and it isn't absurdly wide (> MaxSpreadFraction). Real XMR spreads top out
     // ~10-13%, so a 25%+ spread means one side — usually a mis-scaled quote returned by a broken
