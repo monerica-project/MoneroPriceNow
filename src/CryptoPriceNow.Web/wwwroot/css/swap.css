@@ -51,6 +51,21 @@ select.swap-ctrl { cursor: pointer; }
 .swap-prompt { text-align: center; color: var(--text-muted); padding: 20px 10px; }
 .swap-muted { color: var(--text-muted); }
 .swap-table-wrap { overflow-x: auto; }
+/* Rate toggle (Floating / Fixed). */
+.swap-rate { display: flex; gap: 8px; margin-top: 12px; }
+.swap-rate-opt { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: .85rem;
+    color: var(--text-muted); border: 1px solid var(--border-hi, #2a2c33); border-radius: 999px; padding: 5px 12px; }
+.swap-rate-opt.on { color: #fff; border-color: rgba(255,106,0,.6); background: rgba(255,106,0,.12); }
+.swap-rate-opt input { accent-color: #ff6a00; }
+
+/* Inline streaming indicator while quotes arrive one by one. The [hidden] rule must beat the
+   class selector below, or it would show permanently. */
+.swap-streaming[hidden] { display: none !important; }
+.swap-streaming { display: flex; align-items: center; justify-content: center; gap: 10px;
+    color: var(--text-muted); padding: 16px; font-size: .9rem; }
+.swap-spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid rgba(255,106,0,.25);
+    border-top-color: #ff6a00; animation: swapspin .8s linear infinite; flex: 0 0 auto; }
+@keyframes swapspin { to { transform: rotate(360deg); } }
 
 .swap-results { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .swap-results th, .swap-results td { padding: 10px 8px; text-align: right; border-bottom: 1px solid var(--border, #23252b); }

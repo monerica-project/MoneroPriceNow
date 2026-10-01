@@ -86,7 +86,18 @@
 
 @if (priced.Count == 0)
 {
-    <p>No live prices for @ex.SiteName right now — it may be temporarily unavailable. Check back shortly.</p>
+    @if (Model.IsFiller)
+    {
+        <p>
+            MoneroPriceNow charts the two-way price board; <strong>@ex.SiteName</strong> is a one-way
+            Monero off-ramp, so its rates aren't tracked here. See its full profile, details and links on
+            <a href="@Model.MonericaUrl" target="_blank" rel="noopener">its Monerica listing &rarr;</a>
+        </p>
+    }
+    else
+    {
+        <p>No live prices for @ex.SiteName right now — it may be temporarily unavailable. Check back shortly.</p>
+    }
 }
 else
 {

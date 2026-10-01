@@ -2,6 +2,8 @@ using CryptoPriceNow.Data.Entities;
 using CryptoPriceNow.Data.Services;
 using CryptoPriceNow.Services;
 using CryptoPriceNow.Web.Models;
+using ExchangeServices.Abstractions;
+using ExchangeServices.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -17,15 +19,21 @@ public sealed class ExchangeModel : PageModel
 {
     private readonly IPriceService _prices;
     private readonly ExchangeDirectoryService _directory;
+    private readonly IEnumerable<IExchangePriceApi> _apis;
 
-    public ExchangeModel(IPriceService prices, ExchangeDirectoryService directory)
+    public ExchangeModel(IPriceService prices, ExchangeDirectoryService directory, IEnumerable<IExchangePriceApi> apis)
     {
         _prices = prices;
         _directory = directory;
+        _apis = apis;
     }
 
     public Exchange Exchange { get; private set; } = default!;
     public string Slug { get; private set; } = string.Empty;
+
+    /// <summary>True for a one-way venue (e.g. sell-only xmr2cex) that has no two-way board data:
+    /// we render a light profile page linking to its Monerica listing instead of charts.</summary>
+    public bool IsFiller { get; private set; }
 
     public string MonericaUrl => $"https://monerica.com/site/{Slug}";
 
@@ -67,7 +75,29 @@ public sealed class ExchangeModel : PageModel
         var exchange = await _directory.GetBySlugAsync(Slug, ct);
         if (exchange is null)
         {
-            return NotFound();
+            // Not on the two-way price board (e.g. a one-way, sell-only venue like xmr2cex that
+            // never posts board data). If it's still a registered exchange client, show a light
+            // filler profile that links to its Monerica listing rather than returning a 404.
+            var api = _apis.FirstOrDefault(a =>
+                string.Equals(ExchangeSlug.From(a.SiteName), Slug, StringComparison.Ordinal));
+            if (api is null)
+            {
+                return NotFound();
+            }
+
+            Exchange = new Exchange
+            {
+                ExchangeKey = api.ExchangeKey,
+                SiteName = api.SiteName,
+                SiteUrl = api.SiteUrl,
+                PrivacyLevel = (api as IPrivacyLevel)?.PrivacyLevel.ToString(),
+                IsActive = true,
+            };
+            IsFiller = true;
+            ViewData["Title"] = $"{api.SiteName} — Monero (XMR) Exchange | MoneroPriceNow";
+            ViewData["Description"] =
+                $"{api.SiteName} is a Monero exchange in the MoneroPriceNow directory. See its full profile on Monerica.";
+            return Page();
         }
 
         Exchange = exchange;

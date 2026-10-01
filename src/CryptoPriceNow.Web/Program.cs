@@ -15,6 +15,9 @@ builder.Services.AddHttpClient();
 // Registers exchange clients + options binding
 builder.Services.AddCryptoPriceNowServices(builder.Configuration);
 
+// Amount-accurate swap quoting for /swap (fans out to each exchange with the real amount).
+builder.Services.AddSingleton<CryptoPriceNow.Web.Support.SwapQuoteService>();
+
 // Postgres quote store. No-ops (NullPriceQuoteSink) when ConnectionStrings:PriceDb
 // is absent, so the site runs unchanged without a database.
 builder.Services.AddCryptoPriceNowData(builder.Configuration);
@@ -206,6 +209,45 @@ app.MapGet("/api/prices/two-way", async (
 {
     var rows = await prices.GetTwoWayPricesAsync(@base, quote, ct);
     return Results.Ok(rows);
+});
+
+// Live amount-accurate swap quotes, streamed one JSON object per line (NDJSON) as each exchange
+// responds — the /swap page reads this and renders rows in as they arrive.
+app.MapGet("/swap/stream", async (
+    HttpContext http,
+    [FromServices] CryptoPriceNow.Web.Support.SwapQuoteService swap,
+    string? from,
+    string? to,
+    decimal? amount,
+    string? rate,
+    CancellationToken ct) =>
+{
+    http.Response.ContentType = "application/x-ndjson; charset=utf-8";
+    http.Response.Headers["Cache-Control"] = "no-store";
+    http.Response.Headers["X-Accel-Buffering"] = "no"; // tell nginx not to buffer the stream
+
+    var amt = amount is > 0 and < 1_000_000_000 ? amount.Value : 0m;
+    if (amt <= 0)
+    {
+        return;
+    }
+
+    var fixedRate = string.Equals(rate, "fixed", StringComparison.OrdinalIgnoreCase);
+    await foreach (var q in swap.GetQuotesStream(from ?? string.Empty, to ?? string.Empty, amt, fixedRate, ct))
+    {
+        var payload = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            name = q.SiteName,
+            receive = q.Receive,
+            perXmr = q.PerXmr,
+            privacy = q.PrivacyLevel?.ToString(),
+            sponsor = q.IsSponsor,
+            outHref = q.OutHref,
+            exchangeUrl = q.ExchangeUrl,
+        });
+        await http.Response.WriteAsync(payload + "\n", ct);
+        await http.Response.Body.FlushAsync(ct);
+    }
 });
 
 // ── Headline XMR price — MOVED to the CDN ────────────────────────────────────

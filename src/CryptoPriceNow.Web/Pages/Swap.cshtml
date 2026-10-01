@@ -9,11 +9,14 @@
 
     string Fmt(decimal v, int d) => v.ToString("N" + d, CultureInfo.InvariantCulture);
     string assetDefault = Model.From switch { "xmr" => "5", "btc" => "0.05", "eth" => "1", "usdt" => "1000", _ => "1" };
+    string amountInv = Model.Amount.ToString("0.########", CultureInfo.InvariantCulture);
 
-    // Reverse link: same asset + amount, flipped direction (carry the quote state so a reverse
-    // after searching re-quotes rather than dropping back to the form).
+    // Reverse link: same asset + amount + rate, flipped direction (carry the quote state so a
+    // reverse after searching re-quotes rather than dropping back to the form).
+    string rateQs = Model.Fixed ? "&rate=fixed" : "";
     string reverseHref = $"/swap?asset={Model.Asset}&dir={(Model.SellingXmr ? "buy" : "sell")}"
         + (Model.AmountProvided ? $"&amount={Uri.EscapeDataString(Model.AmountInput)}" : "")
+        + rateQs
         + (Model.Quoted ? "&go=1" : "");
 
     // Network tag is PER-ASSET: BTC and ETH need none (their network is obvious); only USDT is
@@ -32,6 +35,7 @@
         <p>Live rates across every exchange we track — one side is always XMR. Pick an amount and direction, then swap on the exchange.</p>
     </div>
 
+    <div id="swapApp">
     <div class="swap-card">
         <form class="swap-form" method="get" action="/swap" autocomplete="off">
             <input type="hidden" name="dir" value="@(Model.SellingXmr ? "sell" : "buy")" />
@@ -82,6 +86,15 @@
 
                 <button type="submit" class="swap-go">Get quotes</button>
             </div>
+
+            <div class="swap-rate" role="group" aria-label="Rate type">
+                <label class="swap-rate-opt @(Model.Fixed ? "" : "on")" title="Final amount settles at execution — usually a bit better">
+                    <input type="radio" name="rate" value="float" @(Model.Fixed ? "" : "checked") /> Floating
+                </label>
+                <label class="swap-rate-opt @(Model.Fixed ? "on" : "")" title="Amount locked when you start the swap (supported exchanges only)">
+                    <input type="radio" name="rate" value="fixed" @(Model.Fixed ? "checked" : "") /> Fixed
+                </label>
+            </div>
         </form>
         <p class="swap-note">Reverse with ⇄. Rates are indicative and may change at execution.</p>
     </div>
@@ -90,16 +103,77 @@
     {
         <p class="swap-prompt">Enter an amount and hit <strong>Get quotes</strong> to compare exchanges.</p>
     }
-    else if (Model.Results.Count == 0)
+    else if (Model.NoJs)
     {
-        <div class="swap-prompt">
-            <p>No exchange we track is currently quoting <strong>@Model.FromUpper → @Model.ToUpper</strong>.</p>
-            <p>Try the other direction or another asset.</p>
-        </div>
+        @* No-JS fallback: the server queried every exchange and renders the finished table. *@
+        @if (Model.Results.Count > 0)
+        {
+            <div class="swap-table-wrap">
+                <table class="swap-results">
+                    <thead>
+                        <tr>
+                            <th>Exchange</th>
+                            <th>You get (@Model.ToUpper@NetFor(Model.To))</th>
+                            <th class="col-rate">Rate (1 XMR)</th>
+                            <th>Privacy</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ var isFirst = true; }
+                        @foreach (var r in Model.Results)
+                        {
+                            var p = r.PrivacyLevel.HasValue ? char.ToUpperInvariant(r.PrivacyLevel.Value).ToString() : null;
+                            var rowClass = (isFirst ? "swap-best " : "") + (r.IsSponsor ? "swap-sponsor" : "");
+                            var rel = r.IsSponsor ? "noopener" : "nofollow noopener sponsored";
+                            <tr class="@rowClass.Trim()">
+                                <td>
+                                    <a class="swap-ex-name" href="@r.ExchangeUrl" title="@r.SiteName prices &amp; chart">@r.SiteName</a>
+                                    @if (r.IsSponsor)
+                                    {
+                                        <span class="swap-badge-sponsor">★ SPONSOR</span>
+                                    }
+                                </td>
+                                <td class="swap-get">@Fmt(r.Receive, Model.ReceiveDecimals)</td>
+                                <td class="col-rate">@Fmt(r.PerXmr, Model.Pair.Decimals) @Model.AssetUpper</td>
+                                <td>
+                                    @if (p is not null)
+                                    {
+                                        <span class="privacy-badge privacy-@p" title="Privacy grade @p">@p</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="swap-muted">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(r.OutHref))
+                                    {
+                                        <a class="swap-out" href="@r.OutHref" target="_blank" rel="@rel">Swap ↗</a>
+                                    }
+                                </td>
+                            </tr>
+                            isFirst = false;
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="swap-prompt">
+                <p><strong>No exchange will swap @Fmt(Model.Amount, Model.SellingXmr ? 8 : Model.Pair.Decimals) @Model.FromUpper right now.</strong></p>
+                <p>That amount is likely below the exchanges' minimums — try a larger amount, a different asset, or the other direction.</p>
+            </div>
+        }
     }
     else
     {
-        <div class="swap-table-wrap">
+        @* JS streaming: each exchange's quote is rendered in as it arrives (see the script below). *@
+        <div class="swap-table-wrap" id="swapStream"
+             data-from="@Model.From" data-to="@Model.To" data-amount="@amountInv"
+             data-rate="@(Model.Fixed ? "fixed" : "float")"
+             data-decimals="@Model.ReceiveDecimals" data-ratedecimals="@Model.Pair.Decimals" data-asset="@Model.AssetUpper">
             <table class="swap-results">
                 <thead>
                     <tr>
@@ -110,48 +184,22 @@
                         <th></th>
                     </tr>
                 </thead>
-                <tbody>
-                    @{ var isFirst = true; }
-                    @foreach (var r in Model.Results)
-                    {
-                        var p = r.PrivacyLevel.HasValue ? char.ToUpperInvariant(r.PrivacyLevel.Value).ToString() : null;
-                        var rowClass = (isFirst ? "swap-best " : "") + (r.IsSponsor ? "swap-sponsor" : "");
-                        // Sponsors get a clean link (no affiliate); everyone else is nofollow+sponsored.
-                        var rel = r.IsSponsor ? "noopener" : "nofollow noopener sponsored";
-                        <tr class="@rowClass.Trim()">
-                            <td>
-                                <a class="swap-ex-name" href="@r.MonericaUrl" target="_blank" rel="noopener"
-                                   title="@r.SiteName on Monerica">@r.SiteName</a>
-                                @if (r.IsSponsor)
-                                {
-                                    <span class="swap-badge-sponsor">★ SPONSOR</span>
-                                }
-                            </td>
-                            <td class="swap-get">@Fmt(r.Receive, Model.ReceiveDecimals)</td>
-                            <td class="col-rate">@Fmt(r.PerXmr, Model.Pair.Decimals) @Model.AssetUpper</td>
-                            <td>
-                                @if (p is not null)
-                                {
-                                    <span class="privacy-badge privacy-@p" title="Privacy grade @p">@p</span>
-                                }
-                                else
-                                {
-                                    <span class="swap-muted">—</span>
-                                }
-                            </td>
-                            <td>
-                                @if (!string.IsNullOrWhiteSpace(r.OutHref))
-                                {
-                                    <a class="swap-out" href="@r.OutHref" target="_blank" rel="@rel">Swap ↗</a>
-                                }
-                            </td>
-                        </tr>
-                        isFirst = false;
-                    }
-                </tbody>
+                <tbody id="swapStreamBody"></tbody>
             </table>
         </div>
+        <div class="swap-streaming" id="swapStreaming"><span class="swap-spinner" aria-hidden="true"></span> Fetching live quotes from exchanges…</div>
+        <div class="swap-prompt" id="swapStreamEmpty" hidden>
+            <p><strong>No exchange will swap @Fmt(Model.Amount, Model.SellingXmr ? 8 : Model.Pair.Decimals) @Model.FromUpper right now.</strong></p>
+            <p>The amount is likely below the exchanges' minimums — try a larger amount, a different asset, or the other direction.</p>
+        </div>
+        <noscript>
+            <p class="swap-prompt">
+                <a href="/swap?asset=@Model.Asset&amp;dir=@(Model.SellingXmr ? "sell" : "buy")&amp;amount=@Uri.EscapeDataString(Model.AmountInput)@(Model.Fixed ? "&amp;rate=fixed" : "")&amp;go=1&amp;nojs=1">Load quotes without JavaScript →</a>
+                (takes a few seconds)
+            </p>
+        </noscript>
     }
+    </div>
 
     <p class="swap-disclaimer">
         <strong>MoneroPriceNow does not hold, custody, or receive funds.</strong>
@@ -162,9 +210,105 @@
 
 @section Scripts {
     <script>
-        // Progressive enhancement: submit as soon as the asset is changed (still works without JS).
-        document.querySelectorAll('.swap-form select[name="asset"]').forEach(function (sel) {
-            sel.addEventListener('change', function () { sel.form.submit(); });
-        });
+        (function () {
+            // Changing the asset or the rate re-submits the (GET) form so the page reloads for it.
+            document.addEventListener('change', function (e) {
+                if (e.target && e.target.matches &&
+                    (e.target.matches('.swap-form select[name="asset"]') || e.target.matches('.swap-form input[name="rate"]'))) {
+                    var form = e.target.closest('.swap-form');
+                    if (form) { if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); } }
+                }
+            });
+
+            // Live streaming: read the NDJSON quote stream and render each exchange in as it arrives.
+            var stream = document.getElementById('swapStream');
+            if (!stream) { return; }
+            var body = document.getElementById('swapStreamBody');
+            var spin = document.getElementById('swapStreaming');
+            var empty = document.getElementById('swapStreamEmpty');
+
+            var from = stream.getAttribute('data-from');
+            var to = stream.getAttribute('data-to');
+            var amount = stream.getAttribute('data-amount');
+            var rate = stream.getAttribute('data-rate') || 'float';
+            var dec = parseInt(stream.getAttribute('data-decimals'), 10); if (isNaN(dec)) { dec = 4; }
+            var rdec = parseInt(stream.getAttribute('data-ratedecimals'), 10); if (isNaN(rdec)) { rdec = 6; }
+            var asset = stream.getAttribute('data-asset') || '';
+
+            function norm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+            function esc(s) { var d = document.createElement('div'); d.textContent = (s == null ? '' : s); return d.innerHTML; }
+            function fmt(x, d) { return Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+            var rows = {};
+            stream.hidden = true;
+
+            function render() {
+                var arr = Object.keys(rows).map(function (k) { return rows[k]; });
+                // Drop mis-scaled outliers: once enough have voted, keep quotes near the median.
+                if (arr.length >= 4) {
+                    var recs = arr.map(function (x) { return x.receive; }).sort(function (a, b) { return a - b; });
+                    var med = recs[Math.floor(recs.length / 2)];
+                    if (med > 0) {
+                        var lo = med * 0.5, hi = med * 2;
+                        arr = arr.filter(function (x) { return x.receive >= lo && x.receive <= hi; });
+                    }
+                }
+                arr.sort(function (a, b) { return b.receive - a.receive; });
+                var html = '';
+                arr.forEach(function (q, i) {
+                    var cls = (i === 0 ? 'swap-best ' : '') + (q.sponsor ? 'swap-sponsor' : '');
+                    var p = q.privacy ? String(q.privacy).toUpperCase().charAt(0) : null;
+                    var rel = q.sponsor ? 'noopener' : 'nofollow noopener sponsored';
+                    var name = esc(q.name);
+                    var priv = p ? '<span class="privacy-badge privacy-' + p + '" title="Privacy grade ' + p + '">' + p + '</span>' : '<span class="swap-muted">—</span>';
+                    var out = q.outHref ? '<a class="swap-out" href="' + esc(q.outHref) + '" target="_blank" rel="' + rel + '">Swap ↗</a>' : '';
+                    var badge = q.sponsor ? ' <span class="swap-badge-sponsor">★ SPONSOR</span>' : '';
+                    html += '<tr class="' + cls.trim() + '">'
+                        + '<td><a class="swap-ex-name" href="' + esc(q.exchangeUrl) + '" title="' + name + ' prices &amp; chart">' + name + '</a>' + badge + '</td>'
+                        + '<td class="swap-get">' + fmt(q.receive, dec) + '</td>'
+                        + '<td class="col-rate">' + fmt(q.perXmr, rdec) + ' ' + esc(asset) + '</td>'
+                        + '<td>' + priv + '</td>'
+                        + '<td>' + out + '</td>'
+                        + '</tr>';
+                });
+                body.innerHTML = html;
+                stream.hidden = arr.length === 0;
+            }
+
+            function handle(q) {
+                if (!q || !(q.receive > 0)) { return; }
+                var k = norm(q.name);
+                if (!rows[k] || q.receive > rows[k].receive) { rows[k] = q; render(); }
+            }
+
+            function done() {
+                if (spin) { spin.hidden = true; }
+                if (Object.keys(rows).length === 0 && empty) { empty.hidden = false; }
+            }
+
+            var url = '/swap/stream?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to)
+                + '&amount=' + encodeURIComponent(amount) + '&rate=' + encodeURIComponent(rate);
+            fetch(url).then(function (res) {
+                if (!res.ok || !res.body) { done(); return; }
+                var reader = res.body.getReader();
+                var decoder = new TextDecoder();
+                var buf = '';
+                function pump() {
+                    return reader.read().then(function (r) {
+                        if (r.done) {
+                            if (buf.trim()) { try { handle(JSON.parse(buf)); } catch (e) { } }
+                            done();
+                            return;
+                        }
+                        buf += decoder.decode(r.value, { stream: true });
+                        var lines = buf.split('\n');
+                        buf = lines.pop();
+                        lines.forEach(function (line) { if (line.trim()) { try { handle(JSON.parse(line)); } catch (e) { } } });
+                        return pump();
+                    });
+                }
+                return pump();
+            }).catch(function () { done(); });
+        })();
     </script>
 }

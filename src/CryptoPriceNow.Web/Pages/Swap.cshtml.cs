@@ -1,7 +1,6 @@
 using System.Globalization;
-using System.Text.Json;
-using CryptoPriceNow.Services;
 using CryptoPriceNow.Web.Models;
+using CryptoPriceNow.Web.Support;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace CryptoPriceNow.Pages;
@@ -22,15 +21,11 @@ namespace CryptoPriceNow.Pages;
 /// </summary>
 public sealed class SwapModel : PageModel
 {
-    private readonly IPriceService prices;
-    private readonly IHttpClientFactory httpFactory;
-    private readonly IConfiguration config;
+    private readonly SwapQuoteService swap;
 
-    public SwapModel(IPriceService prices, IHttpClientFactory httpFactory, IConfiguration config)
+    public SwapModel(SwapQuoteService swap)
     {
-        this.prices = prices;
-        this.httpFactory = httpFactory;
-        this.config = config;
+        this.swap = swap;
     }
 
     /// <summary>The non-XMR assets a trade can be paired against.</summary>
@@ -60,6 +55,13 @@ public sealed class SwapModel : PageModel
     /// <summary>True once the user has actually asked for a quote (submitted the form).</summary>
     public bool Quoted { get; private set; }
 
+    /// <summary>The no-JavaScript fallback: fetch every quote server-side and render the table
+    /// (slower, one page load). With JS the page instead streams quotes in one by one.</summary>
+    public bool NoJs { get; private set; }
+
+    /// <summary>Fixed-rate mode (locked at quote time) vs the default floating rate.</summary>
+    public bool Fixed { get; private set; }
+
     public IReadOnlyList<SwapQuoteRow> Results { get; private set; } = System.Array.Empty<SwapQuoteRow>();
 
     public int RespondedCount => Results.Count;
@@ -80,20 +82,14 @@ public sealed class SwapModel : PageModel
         _ => t.ToUpperInvariant(),
     };
 
-    public sealed record SwapQuoteRow(
-        string SiteName,
-        decimal Receive,
-        decimal PerXmr,       // asset units per 1 XMR
-        char? PrivacyLevel,
-        string RateType,
-        bool IsSponsor,
-        string? OutHref,      // sponsor → direct link; else affiliate URL
-        string MonericaUrl);  // exchange name → its Monerica listing
 
     public async Task OnGetAsync(
-        string? from, string? to, string? asset, string? dir, string? amount, string? go, CancellationToken ct)
+        string? from, string? to, string? asset, string? dir, string? amount, string? go, string? nojs,
+        string? rate, CancellationToken ct)
     {
         Quoted = !string.IsNullOrWhiteSpace(go);
+        NoJs = !string.IsNullOrWhiteSpace(nojs);
+        Fixed = string.Equals((rate ?? string.Empty).Trim(), "fixed", System.StringComparison.OrdinalIgnoreCase);
 
         // ---- Resolve direction. Exactly one side is always XMR; default is BTC → XMR. ----
         var a = Norm(asset);
@@ -133,53 +129,30 @@ public sealed class SwapModel : PageModel
             ? amt.ToString("0.########", CultureInfo.InvariantCulture) // show the amount being quoted
             : rawAmount;                                               // fresh landing → empty box
 
-        if (!Quoted)
+        // With JS the page streams quotes in one by one from /swap/stream; we only fetch them
+        // server-side for the no-JS fallback (?nojs=1), which renders the finished table.
+        if (!Quoted || !NoJs)
         {
-            return; // form-only view — no exchange list until a quote is requested
+            return;
         }
 
-        // ---- Quotes. Sell direction uses one-way SELL rows (includes sell-only venues like
-        //      xmr2cex); buy direction uses the two-way board rows (Buy side). ----
-        var src = SellingXmr
-            ? await this.prices.GetSellRowsAsync(Pair.Base, Pair.ApiQuote, ct)
-            : await this.prices.GetTwoWayPricesAsync(Pair.Base, Pair.ApiQuote, ct);
-
-        var sponsors = await GetSponsorsAsync(ct);
-
-        // One row per exchange (deduped by normalized name), best rate kept.
-        var best = new Dictionary<string, SwapQuoteRow>(System.StringComparer.Ordinal);
-        foreach (var r in src)
+        // ---- No-JS path: fan out to every exchange with the EXACT amount and render once complete.
+        //      A rate for 0.00001 BTC is nothing like the rate for 10 BTC, and an amount below an
+        //      exchange's minimum simply returns no quote and drops out. ----
+        var best = new Dictionary<string, SwapQuoteRow>(System.StringComparer.OrdinalIgnoreCase);
+        await foreach (var q in this.swap.GetQuotesStream(From, To, Amount, Fixed, ct))
         {
-            var perXmr = SellingXmr ? r.Sell : r.Buy;
-            if (perXmr is not decimal per || per <= 0)
+            var nk = new string(q.SiteName.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+            if (!best.TryGetValue(nk, out var existing) || q.Receive > existing.Receive)
             {
-                continue;
-            }
-
-            var receive = SellingXmr ? Amount * per : Amount / per;
-            if (receive <= 0)
-            {
-                continue;
-            }
-
-            var nk = NormName(r.SiteName);
-            var isSponsor = sponsors.TryGetValue(nk, out var sponsorLink) && !string.IsNullOrWhiteSpace(sponsorLink);
-            var outHref = isSponsor ? sponsorLink : r.SiteUrl; // sponsors link direct, not via affiliate
-
-            var row = new SwapQuoteRow(
-                r.SiteName, receive, per, r.PrivacyLevel, r.RateType,
-                isSponsor, outHref, "https://monerica.com/site/" + Slugify(r.SiteName));
-
-            if (!best.TryGetValue(nk, out var existing) || row.Receive > existing.Receive)
-            {
-                best[nk] = row;
+                best[nk] = q;
             }
         }
 
         var list = best.Values.ToList();
 
-        // Drop nonsensical outliers (a mis-scaled one-way sell quote): keep quotes within a band
-        // around the median once there are enough to vote.
+        // Drop nonsensical outliers (a mis-scaled quote): keep quotes within a band around the
+        // median once there are enough to vote.
         if (list.Count >= 4)
         {
             var ordered = list.Select(x => x.Receive).OrderBy(x => x).ToList();
@@ -194,93 +167,6 @@ public sealed class SwapModel : PageModel
 
         // Best rate first — sponsors are highlighted in the view, not floated above better rates.
         Results = list.OrderByDescending(x => x.Receive).ToList();
-    }
-
-    // ── Sponsor lookup (normalized name → direct link), briefly cached across requests. ──
-    private static readonly SemaphoreSlim SponsorLock = new(1, 1);
-    private static Dictionary<string, string> sponsorCache = new(System.StringComparer.Ordinal);
-    private static DateTime sponsorCachedAt = DateTime.MinValue;
-
-    private async Task<Dictionary<string, string>> GetSponsorsAsync(CancellationToken ct)
-    {
-        var ttl = TimeSpan.FromMinutes(this.config.GetValue("Sponsors:CacheTtlMinutes", 20));
-        if (sponsorCachedAt != DateTime.MinValue && DateTime.UtcNow - sponsorCachedAt < ttl)
-        {
-            return sponsorCache;
-        }
-
-        await SponsorLock.WaitAsync(ct);
-        try
-        {
-            if (sponsorCachedAt != DateTime.MinValue && DateTime.UtcNow - sponsorCachedAt < ttl)
-            {
-                return sponsorCache;
-            }
-
-            var map = new Dictionary<string, string>(System.StringComparer.Ordinal);
-            var url = this.config["Sponsors:SourceUrl"];
-            if (!string.IsNullOrWhiteSpace(url))
-            {
-                var client = this.httpFactory.CreateClient();
-                client.Timeout = TimeSpan.FromSeconds(10);
-                var json = await client.GetStringAsync(url, ct);
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var el in doc.RootElement.EnumerateArray())
-                    {
-                        var name = el.TryGetProperty("name", out var n) ? n.GetString() : null;
-                        var link = el.TryGetProperty("link", out var l) ? l.GetString() : null;
-
-                        var active = true;
-                        if (el.TryGetProperty("expirationDate", out var e) && e.ValueKind == JsonValueKind.String
-                            && DateTime.TryParse(e.GetString(), CultureInfo.InvariantCulture,
-                                DateTimeStyles.AdjustToUniversal, out var exp))
-                        {
-                            active = exp > DateTime.UtcNow;
-                        }
-
-                        if (active && !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(link))
-                        {
-                            map[NormName(name)] = link!;
-                        }
-                    }
-                }
-            }
-
-            sponsorCache = map;
-            sponsorCachedAt = DateTime.UtcNow;
-            return map;
-        }
-        catch
-        {
-            // On failure keep whatever we had (possibly empty) and don't hammer the source.
-            sponsorCachedAt = DateTime.UtcNow;
-            return sponsorCache;
-        }
-        finally
-        {
-            SponsorLock.Release();
-        }
-    }
-
-    // Matches the board's normName: lower-case, strip everything but a-z0-9 (sponsor key match).
-    private static string NormName(string? s)
-        => new string((s ?? string.Empty).ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
-
-    // Matches the board's exchangeSlug: lower-case, non-alphanumeric runs → "-", trim "-".
-    private static string Slugify(string? s)
-    {
-        var lower = (s ?? string.Empty).ToLowerInvariant();
-        var sb = new System.Text.StringBuilder(lower.Length);
-        var lastDash = false;
-        foreach (var c in lower)
-        {
-            if (char.IsLetterOrDigit(c)) { sb.Append(c); lastDash = false; }
-            else if (!lastDash) { sb.Append('-'); lastDash = true; }
-        }
-
-        return sb.ToString().Trim('-');
     }
 
     private static string Norm(string? s)
