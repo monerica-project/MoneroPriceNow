@@ -26,6 +26,10 @@ public static class ServiceCollectionExtensions
         {
             services.AddSingleton<IPriceQuoteSink, NullPriceQuoteSink>();
             services.AddSingleton<INetworkFeeQuoteSink, NullNetworkFeeQuoteSink>();
+
+            // /exchanges and /exchange/{x} inject this directly; without a DB it answers
+            // "no exchanges" (friendly empty page / 404) rather than failing DI with a 500.
+            services.AddSingleton<ExchangeDirectoryService>();
             return services;
         }
 

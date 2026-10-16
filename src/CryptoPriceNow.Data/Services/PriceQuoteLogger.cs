@@ -109,6 +109,9 @@ public sealed class PriceQuoteLogger : BackgroundService, IPriceQuoteSink
         catch (OperationCanceledException) { /* shutdown */ }
     }
 
+    internal static string DedupeKey(string exchangeKey, string pair, string? rateType)
+        => $"{exchangeKey}|{pair}|{(string.IsNullOrWhiteSpace(rateType) ? "float" : rateType)}".ToLowerInvariant();
+
     private async Task ProcessAsync(QuoteSnapshot snapshot, CancellationToken ct)
     {
         // Throttle: at most one logged snapshot per pair per LogIntervalSeconds
@@ -139,8 +142,11 @@ public sealed class PriceQuoteLogger : BackgroundService, IPriceQuoteSink
 
             var ts = (row.QuoteTsUtc ?? snapshot.CapturedUtc).ToUniversalTime();
 
-            // 3) Dedupe: same exchange quote timestamp = same cached quote, skip
-            var dedupeKey = $"{row.ExchangeKey}|{snapshot.Pair}";
+            // 3) Dedupe: same exchange quote timestamp = same cached quote, skip. Keyed per
+            //    RateType too: an exchange's float and fixed rows are separate quotes, and a shared
+            //    key let them overwrite each other's last timestamp, so a carried-forward (same-ts)
+            //    row was re-inserted every cycle.
+            var dedupeKey = DedupeKey(row.ExchangeKey, snapshot.Pair, row.RateType);
             if (_opt.DedupeByQuoteTimestamp &&
                 _lastQuoteTs.TryGetValue(dedupeKey, out var prevTs) && prevTs == ts)
                 continue;

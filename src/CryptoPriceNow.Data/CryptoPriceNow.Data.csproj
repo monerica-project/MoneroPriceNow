@@ -18,4 +18,8 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CryptoPriceNow.Tests" />
+  </ItemGroup>
+
 </Project>

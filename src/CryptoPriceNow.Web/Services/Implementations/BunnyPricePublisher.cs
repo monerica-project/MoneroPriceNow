@@ -91,17 +91,12 @@ public sealed class BunnyPricePublisher : BackgroundService
             decimal? price = null;
             try
             {
+                // Same number as the board headline: float rows only (the feed also carries the
+                // separate Fixed view's rows), already sanity-filtered by GetTwoWayPricesAsync.
                 var rows = await _prices.GetTwoWayPricesAsync(p.Base, p.ApiQuote, ct);
-                var vals = new List<decimal>();
-                foreach (var r in rows)
+                if (BoardMid.FloatMid(rows, p.MinValidPrice) is decimal mid)
                 {
-                    if (r.Sell is decimal s && s > 0m) { vals.Add(s); }
-                    if (r.Buy is decimal b && b > 0m) { vals.Add(b); }
-                }
-
-                if (vals.Count > 0)
-                {
-                    price = Math.Round(vals.Average(), p.Decimals, MidpointRounding.AwayFromZero);
+                    price = Math.Round(mid, p.Decimals, MidpointRounding.AwayFromZero);
                 }
             }
             catch (OperationCanceledException) { throw; }

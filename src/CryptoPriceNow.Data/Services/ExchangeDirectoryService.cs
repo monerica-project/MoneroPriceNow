@@ -7,10 +7,19 @@ namespace CryptoPriceNow.Data.Services;
 /// <summary>Registry lookups for the per-exchange pages (/exchange/{slug}) and index.</summary>
 public sealed class ExchangeDirectoryService
 {
-    private readonly IDbContextFactory<PriceDbContext> _dbFactory;
+    // Null when no database is configured (ConnectionStrings:PriceDb absent): every lookup then
+    // returns "nothing", so /exchanges renders an empty index and /exchange/{x} 404s/falls back
+    // instead of the page throwing a 500 on an unresolvable DbContext factory.
+    private readonly IDbContextFactory<PriceDbContext>? _dbFactory;
     private readonly int _activeWithinMinutes;
 
-    public ExchangeDirectoryService(IDbContextFactory<PriceDbContext> dbFactory, IConfiguration config)
+    /// <summary>No-database constructor (picked by DI when no DbContext factory is registered).</summary>
+    public ExchangeDirectoryService(IConfiguration config)
+        : this(null, config)
+    {
+    }
+
+    public ExchangeDirectoryService(IDbContextFactory<PriceDbContext>? dbFactory, IConfiguration config)
     {
         _dbFactory = dbFactory;
         // "Currently active" = quoted within this window. IsActive alone isn't enough — it's
@@ -29,6 +38,11 @@ public sealed class ExchangeDirectoryService
     /// </summary>
     public async Task<IReadOnlyList<Exchange>> GetActiveAsync(CancellationToken ct = default)
     {
+        if (_dbFactory is null)
+        {
+            return Array.Empty<Exchange>();
+        }
+
         var cutoff = ActiveCutoff;
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         return await db.Exchanges
@@ -44,7 +58,7 @@ public sealed class ExchangeDirectoryService
     /// </summary>
     public async Task<Exchange?> GetBySlugAsync(string slug, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(slug))
+        if (string.IsNullOrWhiteSpace(slug) || _dbFactory is null)
         {
             return null;
         }
@@ -64,6 +78,11 @@ public sealed class ExchangeDirectoryService
     /// <summary>The distinct normalized pairs this exchange has quoted (for the page's pair list).</summary>
     public async Task<IReadOnlyList<string>> GetQuotedPairsAsync(int exchangeId, CancellationToken ct = default)
     {
+        if (_dbFactory is null)
+        {
+            return Array.Empty<string>();
+        }
+
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         return await db.PriceQuotes
             .Where(q => q.ExchangeId == exchangeId)

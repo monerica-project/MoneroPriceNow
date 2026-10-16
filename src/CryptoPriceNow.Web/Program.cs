@@ -185,12 +185,22 @@ app.MapGet("/sitemap.xml", async (HttpContext http, CancellationToken ct) =>
     return Results.Content(sb.ToString(), "application/xml");
 });
 
+// Public price endpoints accept ONLY the PairCatalog pairs (served from the warm snapshot).
+// Any other base/quote is rejected up front so it can never trigger a live exchange fan-out.
+static IResult UnsupportedPair() => Results.BadRequest(new
+{
+    error = "Unsupported pair.",
+    supported = PairCatalog.All.Select(p => new { @base = p.Base, quote = p.ApiQuote }),
+});
+
 app.MapGet("/api/prices", async (
     [FromServices] IPriceService prices,
     string @base,
     string quote,
     CancellationToken ct) =>
 {
+    if (!PriceService.IsSupportedPair(@base, quote)) return UnsupportedPair();
+
     var results = await prices.GetPricesAsync(@base, quote, ct);
     return Results.Ok(results.Select(r => new
     {
@@ -207,6 +217,8 @@ app.MapGet("/api/prices/two-way", async (
     string quote,
     CancellationToken ct) =>
 {
+    if (!PriceService.IsSupportedPair(@base, quote)) return UnsupportedPair();
+
     var rows = await prices.GetTwoWayPricesAsync(@base, quote, ct);
     return Results.Ok(rows);
 });
@@ -485,13 +497,17 @@ app.MapGet("/api/sponsors", async (IHttpClientFactory httpFactory, CancellationT
     }
 });
 
-app.MapGet("/debug/{exchange}/currencies", async (
-    [FromServices] IPriceService prices,
-    string exchange,
-    CancellationToken ct) =>
+// Diagnostic only: hits the exchange's live currency API, so never expose it in production.
+if (app.Environment.IsDevelopment())
 {
-    var list = await prices.GetCurrenciesAsync(exchange, ct);
-    return Results.Ok(list);
-});
+    app.MapGet("/debug/{exchange}/currencies", async (
+        [FromServices] IPriceService prices,
+        string exchange,
+        CancellationToken ct) =>
+    {
+        var list = await prices.GetCurrenciesAsync(exchange, ct);
+        return Results.Ok(list);
+    });
+}
 
 app.Run();

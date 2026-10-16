@@ -34,4 +34,8 @@
     <Folder Include="wwwroot\fonts\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CryptoPriceNow.Tests" />
+  </ItemGroup>
+
 </Project>

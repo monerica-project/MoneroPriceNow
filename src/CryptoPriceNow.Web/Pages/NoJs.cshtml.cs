@@ -55,13 +55,10 @@ public sealed class NoJsModel : PageModel
         try
         {
             this.Rows = await this.prices.GetTwoWayPricesAsync("XMR", "USDTTRC", ct);
-            var mids = this.Rows
-                .Where(r => r.Buy.HasValue && r.Sell.HasValue)
-                .Select(r => (r.Buy!.Value + r.Sell!.Value) / 2m)
-                .ToList();
-            if (mids.Count > 0)
+            // Headline mid = the board's Float-view mid (fixed rows are a separate view).
+            if (BoardMid.FloatMid(this.Rows, PairCatalog.Usdt.MinValidPrice) is decimal mid)
             {
-                this.MidUsdt = Math.Round(mids.Average(), 2);
+                this.MidUsdt = Math.Round(mid, 2);
             }
         }
         catch

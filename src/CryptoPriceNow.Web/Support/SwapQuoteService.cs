@@ -40,6 +40,7 @@ public sealed class SwapQuoteService
 
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(9);
     private static readonly TimeSpan CurrenciesTtl = TimeSpan.FromMinutes(60);
+    private static readonly TimeSpan CurrenciesFailureTtl = TimeSpan.FromMinutes(2);
 
     // Exchanges whose client returns a genuine fixed-rate quote when PriceQuery.Fixed is set. In
     // fixed mode we only query these (others would just echo their float rate).
@@ -315,7 +316,7 @@ public sealed class SwapQuoteService
             c.Ticker.Equals(ticker, StringComparison.OrdinalIgnoreCase))?.ExchangeId;
     }
 
-    private async Task<IReadOnlyList<ExchangeCurrency>> GetCurrenciesAsync(string exchangeKey, CancellationToken ct)
+    internal async Task<IReadOnlyList<ExchangeCurrency>> GetCurrenciesAsync(string exchangeKey, CancellationToken ct)
     {
         var api = this.currencyApis.FirstOrDefault(x =>
             x.ExchangeKey.Equals(exchangeKey, StringComparison.OrdinalIgnoreCase));
@@ -331,7 +332,7 @@ public sealed class SwapQuoteService
         }
 
         var sem = this.locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-        await sem.WaitAsync(CancellationToken.None);
+        await sem.WaitAsync(ct);
         try
         {
             if (this.cache.TryGetValue(key, out cached) && cached is not null)
@@ -344,12 +345,21 @@ public sealed class SwapQuoteService
             {
                 list = await api.GetCurrenciesAsync(ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw; // the caller gave up — don't cache anything for it
+            }
             catch
             {
-                list = System.Array.Empty<ExchangeCurrency>();
+                // Transient failure (incl. the client's own timeout): NOT cached, so the next
+                // request retries instead of the exchange being blanked for the full hour.
+                return System.Array.Empty<ExchangeCurrency>();
             }
 
-            this.cache.Set(key, list, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CurrenciesTtl });
+            // A successful-but-empty list usually means the exchange's currency endpoint failed
+            // softly (clients return [] on error) — keep it only briefly.
+            var ttl = list.Count > 0 ? CurrenciesTtl : CurrenciesFailureTtl;
+            this.cache.Set(key, list, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl });
             return list;
         }
         finally

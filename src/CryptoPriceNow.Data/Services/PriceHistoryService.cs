@@ -17,6 +17,16 @@ public sealed class PriceHistoryService
         => _dbFactory = dbFactory;
 
     /// <summary>
+    /// The SAME "sane two-way quote" predicate the PriceBuckets rollup (PriceQuoteLogger
+    /// .RefreshRollupAsync) and PriceService.IsSaneTwoWayRow apply: both sides present,
+    /// non-negative spread, spread ≤ 25% (PriceServiceOptions.MaxSpreadFraction). Applied to the
+    /// per-exchange chart too, so one mis-scaled raw quote can't spike an exchange's chart.
+    /// </summary>
+    internal const string SaneQuotePredicate =
+        "\"Buy\" IS NOT NULL AND \"Sell\" IS NOT NULL AND \"Buy\" >= \"Sell\" " +
+        "AND (\"Buy\" = 0 OR (\"Buy\" - \"Sell\") / \"Buy\" <= 0.25)";
+
+    /// <summary>
     /// Range presets exposed to the UI. Key → (lookback window, bucket size).
     /// Live view buckets at 30s to match the logger's default interval.
     /// </summary>
@@ -184,6 +194,7 @@ public sealed class PriceHistoryService
                 WHERE "ExchangeId" = @eid
                   AND "Pair" = @pair
                   AND "TimestampUtc" >= @from{rateFilter}
+                  AND {SaneQuotePredicate}
                 GROUP BY 1
                 ORDER BY 1;
                 """;

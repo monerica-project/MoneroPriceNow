@@ -71,8 +71,9 @@ public sealed class SwapModel : PageModel
     public string ToUpper => Label(To);
     public string AssetUpper => Label(Asset);
 
-    /// <summary>Network tag for the non-XMR asset — only USDT is ambiguous (ERC-20 / Ethereum).</summary>
-    public string AssetNetwork => Asset == "usdt" ? "ERC20" : string.Empty;
+    /// <summary>Network tag for the non-XMR asset — only USDT is ambiguous. Quotes are taken for
+    /// USDT on Tron (USDTTRC in SwapQuoteService), so the label must say TRC-20.</summary>
+    public string AssetNetwork => Asset == "usdt" ? "TRC20" : string.Empty;
 
     // "USDT" carries its network so nobody sends the wrong-chain token; BTC/ETH are unambiguous.
     private static string Label(string t) => t switch

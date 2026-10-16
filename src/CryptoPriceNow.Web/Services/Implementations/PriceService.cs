@@ -22,6 +22,8 @@ public sealed class PriceService : IPriceService
     private readonly IReadOnlyDictionary<string, string> rateTypes;
 
     // ── Thundering-herd guard: one semaphore per per-exchange cache key ───────
+    // Bounded: every key is derived from an allow-listed PairCatalog pair (see IsSupportedPair),
+    // an exchange key, a currency-list key or a probe-sizing ticker — never from raw user input.
     private readonly ConcurrentDictionary<string, SemaphoreSlim> keyLocks = new();
 
     // ── Assembled result store ────────────────────────────────────────────────
@@ -63,6 +65,23 @@ public sealed class PriceService : IPriceService
 
     public static AssetRef ParseAssetPublic(string s) => ParseAsset(s);
 
+    // ── Pair allow-list ───────────────────────────────────────────────────────
+    // Only the PairCatalog pairs (XMR/USDT-Tron, XMR/BTC, XMR/ETH) are ever priced. These are the
+    // pairs the warmer keeps hot, so a request is always served from the warm snapshot. Anything
+    // else used to trigger a live fan-out to every exchange (plus CoinGecko lookups) and minted
+    // new per-key semaphores on every distinct base/quote string — an unbounded, unauthenticated
+    // amplification vector on the public /api endpoints.
+    private static readonly HashSet<string> SupportedPairKeys = new(
+        PairCatalog.All.Select(p => PairKey(ParseAsset(p.Base), ParseAsset(p.ApiQuote))),
+        StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsSupportedPair(string? @base, string? quote)
+        => !string.IsNullOrWhiteSpace(@base) && !string.IsNullOrWhiteSpace(quote)
+           && IsSupportedPair(ParseAsset(@base), ParseAsset(quote));
+
+    public static bool IsSupportedPair(AssetRef baseRef, AssetRef quoteRef)
+        => SupportedPairKeys.Contains(PairKey(baseRef, quoteRef));
+
     // ── Called by PriceWarmingService ─────────────────────────────────────────
     // Fetches live data from every exchange API, then atomically stores the
     // assembled result. Does NOT evict existing cache entries first — the old
@@ -75,7 +94,6 @@ public sealed class PriceService : IPriceService
         // any page load during this window returns stale-but-valid data instantly.
         foreach (var api in priceApis)
         {
-            cache.Remove($"price:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}");
             foreach (var mode in new[] { "flt", "fix" })
             {
                 cache.Remove($"sell:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}:{mode}");
@@ -202,6 +220,9 @@ public sealed class PriceService : IPriceService
     private async Task<IReadOnlyList<TwoWayPriceRow>> GetTwoWayPricesInternalAsync(
         AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
     {
+        // Allow-listed pairs only (never fan out live for an arbitrary pair).
+        if (!IsSupportedPair(baseRef, quoteRef)) return Array.Empty<TwoWayPriceRow>();
+
         // Fast path: warmer has already built a snapshot. Cold start only (first request before
         // the warmer has finished its first run) fetches live float-only rows.
         var rows = latestRows.TryGetValue(PairKey(baseRef, quoteRef), out var cached)
@@ -235,6 +256,7 @@ public sealed class PriceService : IPriceService
     {
         var baseRef = ParseAsset(@base);
         var quoteRef = ParseAsset(quote);
+        if (!IsSupportedPair(baseRef, quoteRef)) return Array.Empty<TwoWayPriceRow>();
 
         var rows = latestRows.TryGetValue(PairKey(baseRef, quoteRef), out var cached)
             ? cached
@@ -362,21 +384,27 @@ public sealed class PriceService : IPriceService
         return rows.OrderBy(x => x.Exchange).ToList();
     }
 
+    // Per-exchange SELL prices (1 base = Price quote) for an allow-listed pair, served from the
+    // warm snapshot — the same sanity-filtered FLOAT rows the board shows — instead of a live
+    // fan-out to every exchange per request.
     public async Task<IReadOnlyList<PriceResult>> GetPricesAsync(
         string @base, string quote, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(@base) || string.IsNullOrWhiteSpace(quote))
+        if (!IsSupportedPair(@base, quote))
             return Array.Empty<PriceResult>();
 
         var baseRef = ParseAsset(@base);
         var quoteRef = ParseAsset(quote);
 
-        var tasks = priceApis.Select(api => GetOneExchangePriceAsync(api, baseRef, quoteRef, ct));
-        var results = await Task.WhenAll(tasks);
-
-        return results
-            .Where(r => r is not null)
-            .Cast<PriceResult>()
+        var rows = await GetTwoWayPricesInternalAsync(baseRef, quoteRef, ct);
+        return rows
+            .Where(r => BoardMid.IsFloat(r) && r.Sell is decimal s && s > 0m)
+            .Select(r => new PriceResult(
+                Exchange: r.Exchange,
+                Base: baseRef,
+                Quote: quoteRef,
+                Price: r.Sell!.Value,
+                TimestampUtc: r.TsUtc ?? DateTimeOffset.UtcNow))
             .OrderBy(r => r.Exchange)
             .ToList();
     }
@@ -470,26 +498,15 @@ public sealed class PriceService : IPriceService
         });
     }
 
-    private Task<PriceResult?> GetOneExchangePriceAsync(
-        IExchangePriceApi api, AssetRef baseRef, AssetRef quoteRef, CancellationToken ct)
-    {
-        if (!QuoteSupported(api.ExchangeKey, quoteRef)) return Task.FromResult<PriceResult?>(null);
-        var key = $"price:{api.ExchangeKey}:{baseRef.Key}->{quoteRef.Key}";
-        var ttl = TimeSpan.FromSeconds(Math.Clamp(opt.PriceCacheSeconds, 1, 300));
-        return GetOrCreateLockedAsync<PriceResult?>(key, ttl, ct, async () =>
-        {
-            var (rb, rq) = await ResolveExchangeIdsAsync(api.ExchangeKey, baseRef, quoteRef, ct);
-            return await api.GetSellPriceAsync(new PriceQuery(rb, rq), ct);
-        });
-    }
-
     private async Task<T?> GetOrCreateLockedAsync<T>(
         string key, TimeSpan ttl, CancellationToken ct, Func<Task<T?>> factory)
     {
         if (cache.TryGetValue(key, out T? cached)) return cached;
 
         var sem = keyLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-        await sem.WaitAsync(CancellationToken.None);
+        // Honour the caller's token while queued behind another fetch of the same key: a
+        // timed-out exchange call must not keep waiting on (and then re-running) a slow fetch.
+        await sem.WaitAsync(ct);
         try
         {
             if (cache.TryGetValue(key, out cached)) return cached;

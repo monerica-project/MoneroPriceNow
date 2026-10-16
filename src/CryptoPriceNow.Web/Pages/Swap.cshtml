@@ -20,8 +20,9 @@
         + (Model.Quoted ? "&go=1" : "");
 
     // Network tag is PER-ASSET: BTC and ETH need none (their network is obvious); only USDT is
-    // ambiguous, so it's shown as ERC-20 (Ethereum). Applies to each option individually.
-    string NetFor(string ticker) => ticker == "usdt" ? " (ERC20)" : "";
+    // ambiguous, so it's shown as TRC-20 (Tron) — the network SwapQuoteService actually quotes
+    // (USDTTRC). Applies to each option individually.
+    string NetFor(string ticker) => ticker == "usdt" ? " (TRC20)" : "";
     string SideLabel(string ticker) => ticker == "xmr" ? "XMR" : ticker.ToUpperInvariant() + NetFor(ticker);
 }
 
