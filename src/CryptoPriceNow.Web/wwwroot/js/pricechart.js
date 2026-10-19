@@ -92,6 +92,33 @@
         }, opts);
     }
 
+    // ── Line toggles (Buy / Sell / Market) ────────────────────────────────────
+    // The coloured words under the chart are buttons: click one to hide that
+    // line, click again to bring it back. Hidden lines survive refreshes and
+    // chart rebuilds (pair switch), and the y-axis rescales to what's visible.
+    const hiddenSeries = new Set();
+    const seriesBtns = Array.from(section.querySelectorAll('[data-series]'));
+
+    function syncSeriesButtons() {
+        seriesBtns.forEach(b => {
+            const off = hiddenSeries.has(Number(b.dataset.series));
+            b.setAttribute('aria-pressed', off ? 'false' : 'true');
+            b.classList.toggle('chart-key-off', off);
+        });
+    }
+
+    function toggleSeries(i) {
+        if (hiddenSeries.has(i)) hiddenSeries.delete(i); else hiddenSeries.add(i);
+        if (chart) {
+            chart.setDatasetVisibility(i, !hiddenSeries.has(i));
+            chart.update('none');
+        }
+        syncSeriesButtons();
+    }
+
+    seriesBtns.forEach(b => b.addEventListener('click', () => toggleSeries(Number(b.dataset.series))));
+    syncSeriesButtons();
+
     // ── Range button availability ─────────────────────────────────────────────
     // Only show ranges the data can actually fill. As history accumulates the
     // server reports more available ranges and the buttons appear automatically.
@@ -141,9 +168,9 @@
             data: {
                 labels,
                 datasets: [
-                    dataset('Buy', COLOR_BUY, buy),
-                    dataset('Sell', COLOR_SELL, sell),
-                    dataset('Market', COLOR_MARKET, market, { borderWidth: 2.2 })
+                    dataset('Buy', COLOR_BUY, buy, { hidden: hiddenSeries.has(0) }),
+                    dataset('Sell', COLOR_SELL, sell, { hidden: hiddenSeries.has(1) }),
+                    dataset('Market', COLOR_MARKET, market, { borderWidth: 2.2, hidden: hiddenSeries.has(2) })
                 ]
             },
             options: {
@@ -154,6 +181,8 @@
                 plugins: {
                     legend: {
                         display: true,
+                        // Clicking the in-chart legend uses the same toggle as the buttons below.
+                        onClick: (e, item) => toggleSeries(item.datasetIndex),
                         labels: {
                             color: COLOR_MUTED,
                             font: { family: FONT_MONO, size: 10 },

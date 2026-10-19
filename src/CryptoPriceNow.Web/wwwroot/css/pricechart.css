@@ -141,3 +141,22 @@
 .chart-key-buy    { color: var(--good, #3ecf8e); }
 .chart-key-sell   { color: var(--xmr-orange2, #ff8c3a); }
 .chart-key-market { color: var(--text, #ddd4c4); }
+
+/* Buy / Sell / Market toggles under the price chart */
+button.chart-key {
+    font: inherit;
+    font-weight: 700;
+    background: none;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    padding: .05rem .4rem;
+    cursor: pointer;
+    line-height: 1.5;
+}
+button.chart-key:hover { background: rgba(255,255,255,.06); }
+button.chart-key:focus-visible { outline: 2px solid var(--xmr-orange2, #ff8c3a); outline-offset: 2px; }
+button.chart-key.chart-key-off {
+    opacity: .45;
+    text-decoration: line-through;
+    border-style: dashed;
+}
