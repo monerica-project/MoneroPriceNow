@@ -296,6 +296,7 @@ public sealed class PriceService : IPriceService
         "ccecash",  // supports exchange_mode=fixed on /calculate (client maps query.Fixed → fixed)
         "etzswap",  // supports rateType=fixed on /deposit/public/rate (client maps query.Fixed → fixed)
         "alfacash", // rate.json returns rate (fixed) + rate_floating; client maps query.Fixed → fixed rate
+        "anonchange", // partner /price takes rateType=fixed (client maps query.Fixed → fixed)
         "flashift", // aggregator; getEstimatedAmount returns floating + fixed offers (client maps query.Fixed → fixed)
     };
 
@@ -591,6 +592,7 @@ public sealed class PriceService : IPriceService
             ["octoswap"]    = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
             ["trocador"]    = ["USDT", "BTC", "ETH"], // aggregator; two-way XMR↔BTC/ETH (ETH=ERC20)
             ["xgram"]       = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
+            ["anonchange"]  = ["BTC", "ETH"], // USDT only on Ethereum/Solana, not Tron (the USDT board)
             ["flashift"]    = ["USDT", "BTC", "ETH"], // aggregator; two-way XMR↔BTC/ETH/USDT (USDT=trx/Tron)
 
             // WizardSwap has no USDT listing — it can only price crypto quotes.
