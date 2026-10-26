@@ -190,10 +190,13 @@ html, body {
     font-size: .68rem;
     color: var(--text-muted);
     display: flex;
-    gap: 1.25rem;
-    flex-wrap: wrap;
+    flex-direction: column; /* links on one line, copyright on the next */
+    gap: .45rem;
     align-items: center;
+    text-align: center;
 }
+
+    .site-footer .footer-links { line-height: 1.8; }
 
     .site-footer a {
         color: var(--xmr-orange);

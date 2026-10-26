@@ -56,10 +56,10 @@
 
     <!-- ── Footer ── -->
     <footer class="site-footer">
-        <span>
-            © @System.DateTime.UtcNow.Year MoneroPriceNow.com |
+        <nav class="footer-links">
             <a href="~/">Home</a> |
             <a href="~/exchanges">Exchanges</a> |
+            <a href="~/millionaire">Monero Millionaire</a> |
             <a href="~/about">About</a> |
             <a href="~/network">Network</a> |
             <a href="~/sponsors">Sponsors</a> |
@@ -75,7 +75,8 @@
             {
                 <text> | <a href="@torUrl" rel="noopener noreferrer">Tor</a></text>
             }
-        </span>
+        </nav>
+        <div class="footer-copy">© @System.DateTime.UtcNow.Year MoneroPriceNow.com</div>
     </footer>
 
     <script src="~/lib/jquery/dist/jquery.min.js" defer></script>

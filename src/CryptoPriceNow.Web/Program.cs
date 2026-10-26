@@ -17,6 +17,7 @@ builder.Services.AddCryptoPriceNowServices(builder.Configuration);
 
 // Amount-accurate swap quoting for /swap (fans out to each exchange with the real amount).
 builder.Services.AddSingleton<CryptoPriceNow.Web.Support.SwapQuoteService>();
+builder.Services.AddSingleton<CryptoPriceNow.Web.Support.MillionaireService>();
 
 // Postgres quote store. No-ops (NullPriceQuoteSink) when ConnectionStrings:PriceDb
 // is absent, so the site runs unchanged without a database.
@@ -166,7 +167,7 @@ app.MapGet("/sitemap.xml", async (HttpContext http, CancellationToken ct) =>
     // Stable informational pages.
     foreach (var info in new[]
         {
-            ("/network", "0.6"), ("/about", "0.5"),
+            ("/millionaire", "0.6"), ("/network", "0.6"), ("/about", "0.5"),
             ("/sponsors", "0.4"), ("/contact", "0.4"), ("/privacy", "0.3"),
         })
         entries.Add((origin + info.Item1, "monthly", info.Item2));
@@ -267,6 +268,16 @@ app.MapGet("/swap/stream", async (
 // https://api.moneropricenow.com/xmr-usdt.json (see BunnyPricePublisher), so it never
 // hits this web server. The old in-app endpoint /api/price/xmr-usdt.json was removed and
 // now returns 404 — external consumers should use api.moneropricenow.com.
+
+// Monero Millionaire (/millionaire): XMR needed for 1,000,000 USDT now and 1/7/30/90 days ago.
+app.MapGet("/api/millionaire", async (
+    [FromServices] CryptoPriceNow.Web.Support.MillionaireService millionaire,
+    HttpContext http,
+    CancellationToken ct) =>
+{
+    http.Response.Headers["Cache-Control"] = "no-store";
+    return Results.Ok(await millionaire.GetAsync(ct));
+});
 
 // ── Price history (/api/history) ─────────────────────────────────────────────
 // Bucketed buy/sell/market averages for the chart. range = one of the presets
