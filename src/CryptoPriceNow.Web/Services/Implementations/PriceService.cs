@@ -298,6 +298,8 @@ public sealed class PriceService : IPriceService
         "alfacash", // rate.json returns rate (fixed) + rate_floating; client maps query.Fixed → fixed rate
         "flashift", // aggregator; getEstimatedAmount returns floating + fixed offers (client maps query.Fixed → fixed)
         "anonchange", // partner /price supports rateType=fixed (client maps query.Fixed → fixed)
+        "mistex",   // partner/rates supports rate_type=fixed (client maps query.Fixed → fixed)
+        "betkarma", // fixed-rate only (its estimate is always a fixed quote)
     };
 
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
@@ -606,6 +608,9 @@ public sealed class PriceService : IPriceService
 
             // AnonChange quotes the USDT board with its Ethereum USDT (no Tron) — any working network is fine.
             ["anonchange"]  = ["USDT", "BTC", "ETH"],
+
+            // ChainSwap.io's USDT pairs (ERC20 and Tron) answer "Pair is temporary unavailable".
+            ["chainswap"]   = ["BTC", "ETH"],
         };
 
     private static bool QuoteSupported(string exchangeKey, AssetRef quote)

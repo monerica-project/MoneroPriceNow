@@ -48,7 +48,7 @@ public sealed class SwapQuoteService
     {
         "changenow", "fixedfloat", "exolix", "stealthex", "simpleswap", "trocador", "letsexchange",
         "0trace", "swapuz", "changee", "swapgate", "bitania", "quickex", "pegasusswap", "sageswap",
-        "swapzone", "elcapo", "explace", "ccecash", "etzswap", "alfacash", "flashift", "anonchange",
+        "swapzone", "elcapo", "explace", "ccecash", "etzswap", "alfacash", "flashift", "anonchange", "mistex", "betkarma",
     };
 
     public SwapQuoteService(
