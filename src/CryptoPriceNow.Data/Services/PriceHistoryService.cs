@@ -24,7 +24,7 @@ public sealed class PriceHistoryService
     /// </summary>
     internal const string SaneQuotePredicate =
         "\"Buy\" IS NOT NULL AND \"Sell\" IS NOT NULL AND \"Buy\" >= \"Sell\" " +
-        "AND (\"Buy\" = 0 OR (\"Buy\" - \"Sell\") / \"Buy\" <= 0.25)";
+        "AND \"Sell\" > 0 AND (\"Buy\" - \"Sell\") / \"Buy\" <= 0.25";
 
     /// <summary>
     /// Range presets exposed to the UI. Key → (lookback window, bucket size).

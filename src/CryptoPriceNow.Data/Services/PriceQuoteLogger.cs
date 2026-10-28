@@ -203,7 +203,8 @@ public sealed class PriceQuoteLogger : BackgroundService, IPriceQuoteSink
               -- reached PriceQuotes, it can never pollute the pooled rollup the charts read from.
               AND "Buy" IS NOT NULL AND "Sell" IS NOT NULL
               AND "Buy" >= "Sell"
-              AND ("Buy" = 0 OR ("Buy" - "Sell") / "Buy" <= 0.25)
+              AND "Sell" > 0
+              AND ("Buy" - "Sell") / "Buy" <= 0.25
             GROUP BY "Pair", "RateType", bucket
             ON CONFLICT ("Pair", "RateType", "Bucket") DO UPDATE SET
                 "SumBuy"    = EXCLUDED."SumBuy",

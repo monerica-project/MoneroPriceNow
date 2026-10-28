@@ -243,9 +243,50 @@ public sealed class PriceService : IPriceService
         //     70%+ spread means one side, usually a mis-scaled buy quote, is garbage).
         // Either way the buy/sell pair is nonsensical, so the row is hidden rather than shown.
         var maxSpread = this.opt.MaxSpreadFraction;
-        return rows
-            .Where(r => IsSaneTwoWayRow(r.Buy, r.Sell, maxSpread))
+        return DropPriceOutliers(rows
+            .Where(r => IsSaneTwoWayRow(r.Buy, r.Sell, maxSpread)))
             .ToList();
+    }
+
+    /// <summary>Rows whose mid price is more than this factor away from the median of all rows are dropped.</summary>
+    internal const decimal MaxOutlierRatio = 1.5m;
+
+    /// <summary>
+    /// IsSaneTwoWayRow only checks a row against itself, so an exchange quoting BOTH sides on the
+    /// wrong scale (e.g. a USD figure returned as BTC) passes it and skews the headline mid, the
+    /// public API and the charts. Compare each row's mid to the median of all rows and drop any
+    /// more than <see cref="MaxOutlierRatio"/>x away. Real exchanges sit within a few percent of
+    /// each other; mis-scaled quotes are 10x-500x off. Needs 3+ rows for a meaningful median.
+    /// </summary>
+    internal static IEnumerable<TwoWayPriceRow> DropPriceOutliers(IEnumerable<TwoWayPriceRow> rows)
+    {
+        var list = rows.ToList();
+        var mids = list
+            .Where(r => r.Buy is > 0m && r.Sell is > 0m)
+            .Select(r => (r.Buy!.Value + r.Sell!.Value) / 2m)
+            .OrderBy(m => m)
+            .ToList();
+        if (mids.Count < 3)
+        {
+            return list;
+        }
+
+        var median = mids.Count % 2 == 1
+            ? mids[mids.Count / 2]
+            : (mids[(mids.Count / 2) - 1] + mids[mids.Count / 2]) / 2m;
+        var lo = median / MaxOutlierRatio;
+        var hi = median * MaxOutlierRatio;
+
+        return list.Where(r =>
+        {
+            if (r.Buy is not > 0m || r.Sell is not > 0m)
+            {
+                return true; // nothing to compare; the sanity filter handles one-sided rows
+            }
+
+            var mid = (r.Buy.Value + r.Sell.Value) / 2m;
+            return mid >= lo && mid <= hi;
+        });
     }
 
     // One-way SELL rows (XMR → quote). Reuses the warmer's probe-sized snapshot (same rates as
@@ -277,8 +318,9 @@ public sealed class PriceService : IPriceService
     internal static bool IsSaneTwoWayRow(decimal? buy, decimal? sell, decimal maxSpread)
     {
         if (buy is not decimal b || sell is not decimal s) return false; // both sides required
+        if (b <= 0m || s <= 0m) return false;                            // zero/negative price → bad data
         if (b < s) return false;                                         // negative spread → bad/stale
-        if (maxSpread <= 0m || b <= 0m) return true;                     // guard disabled / no divisor
+        if (maxSpread <= 0m) return true;                                // guard disabled
         return (b - s) / b <= maxSpread;                                 // reject absurdly-wide spreads
     }
 
@@ -441,8 +483,8 @@ public sealed class PriceService : IPriceService
         // price (e.g. LetsExchange's info-revert buy running ~500x high) corrupts the pooled
         // average and blows up the charts even though the board correctly hides that exchange.
         var maxSpread = this.opt.MaxSpreadFraction;
-        var dtoRows = rows
-            .Where(r => IsSaneTwoWayRow(r.Buy, r.Sell, maxSpread))
+        var dtoRows = DropPriceOutliers(rows
+            .Where(r => IsSaneTwoWayRow(r.Buy, r.Sell, maxSpread)))
             .Select(r => new QuoteRowDto(
             ExchangeKey: r.Exchange,
             SiteName: r.SiteName,

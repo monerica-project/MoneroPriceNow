@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ExchangeServices.Abstractions;
@@ -41,6 +42,15 @@ public sealed class SwapQuoteService
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(9);
     private static readonly TimeSpan CurrenciesTtl = TimeSpan.FromMinutes(60);
     private static readonly TimeSpan CurrenciesFailureTtl = TimeSpan.FromMinutes(2);
+
+    // Each uncached request fans out to every exchange (~40 outbound calls). Anyone can hit /swap,
+    // so: only the assets the page offers, identical requests share a short-lived result, and at
+    // most a few fan-outs run at once. Without this a simple loop could make the server hammer the
+    // exchanges until they rate-limit or ban its IP — the same IP the price board polls from.
+    private static readonly HashSet<string> SwapAssets = new(StringComparer.OrdinalIgnoreCase) { "btc", "eth", "usdt" };
+    private static readonly TimeSpan QuoteCacheTtl = TimeSpan.FromSeconds(20);
+    private static readonly SemaphoreSlim FanOutGate = new(3, 3);
+    private static readonly TimeSpan FanOutWait = TimeSpan.FromSeconds(15);
 
     // Exchanges whose client returns a genuine fixed-rate quote when PriceQuery.Fixed is set. In
     // fixed mode we only query these (others would just echo their float rate).
@@ -101,38 +111,71 @@ public sealed class SwapQuoteService
             yield break; // exactly one side must be XMR
         }
 
-        // Parse the pair the SAME way the board does so each client receives the ticker + network
-        // it needs (e.g. "USDTTRC" → ticker USDT on Tron) — otherwise ticker-mapping clients (like
-        // xmr2cex) can't resolve the asset and silently return nothing.
-        var baseRef = CryptoPriceNow.Services.PriceService.ParseAssetPublic("XMR");
-        var quoteRef = CryptoPriceNow.Services.PriceService.ParseAssetPublic(
-            asset == "usdt" ? "USDTTRC" : asset.ToUpperInvariant());
-
-        var sponsors = await GetSponsorsAsync(ct);
-
-        var tasks = this.priceApis
-            .Select(api => FetchOneAsync(api, baseRef, quoteRef, amount, sellingXmr, fixedRate, sponsors, ct))
-            .ToList();
-
-        while (tasks.Count > 0)
+        if (!SwapAssets.Contains(asset))
         {
-            var done = await Task.WhenAny(tasks);
-            tasks.Remove(done);
+            yield break; // only the assets the swap page offers
+        }
 
-            SwapQuoteRow? row = null;
-            try
+        var cacheKey = string.Create(CultureInfo.InvariantCulture, $"swapq:{fromTicker}:{toTicker}:{amount}:{fixedRate}");
+        if (this.cache.TryGetValue(cacheKey, out List<SwapQuoteRow>? cachedRows) && cachedRows is not null)
+        {
+            foreach (var cachedRow in cachedRows)
             {
-                row = await done;
-            }
-            catch
-            {
-                // one exchange failing must not stop the stream
+                yield return cachedRow;
             }
 
-            if (row is not null && row.Receive > 0)
+            yield break;
+        }
+
+        if (!await FanOutGate.WaitAsync(FanOutWait, ct))
+        {
+            yield break; // too many live quote requests right now; the page shows "no quotes"
+        }
+
+        var collected = new List<SwapQuoteRow>();
+        try
+        {
+            // Parse the pair the SAME way the board does so each client receives the ticker + network
+            // it needs (e.g. "USDTTRC" → ticker USDT on Tron) — otherwise ticker-mapping clients (like
+            // xmr2cex) can't resolve the asset and silently return nothing.
+            var baseRef = CryptoPriceNow.Services.PriceService.ParseAssetPublic("XMR");
+            var quoteRef = CryptoPriceNow.Services.PriceService.ParseAssetPublic(
+                asset == "usdt" ? "USDTTRC" : asset.ToUpperInvariant());
+
+            var sponsors = await GetSponsorsAsync(ct);
+
+            var tasks = this.priceApis
+                .Select(api => FetchOneAsync(api, baseRef, quoteRef, amount, sellingXmr, fixedRate, sponsors, ct))
+                .ToList();
+
+            while (tasks.Count > 0)
             {
-                yield return row;
+                var done = await Task.WhenAny(tasks);
+                tasks.Remove(done);
+
+                SwapQuoteRow? row = null;
+                try
+                {
+                    row = await done;
+                }
+                catch
+                {
+                    // one exchange failing must not stop the stream
+                }
+
+                if (row is not null && row.Receive > 0)
+                {
+                    collected.Add(row);
+                    yield return row;
+                }
             }
+
+            // Only a complete run is shared (a client that disconnected mid-stream never caches a partial list).
+            this.cache.Set(cacheKey, collected, QuoteCacheTtl);
+        }
+        finally
+        {
+            FanOutGate.Release();
         }
     }
 
