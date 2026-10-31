@@ -463,14 +463,20 @@ html, body {
     transition: opacity .6s ease, transform .6s ease;
 }
 
+    /* Price went up = green up-triangle, down = red down-triangle, no change = gray circle.
+       Triangles are scaled up a little so they still read as triangles at the smallest sizes. */
     .trend-dot.up {
         background: #3ecf8e;
-        box-shadow: 0 0 5px rgba(62,207,142,.7);
+        border-radius: 0;
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+        transform: scale(1.35);
     }
 
     .trend-dot.down {
         background: #ff5b5b;
-        box-shadow: 0 0 5px rgba(255,91,91,.7);
+        border-radius: 0;
+        clip-path: polygon(0 0, 100% 0, 50% 100%);
+        transform: scale(1.35);
     }
 
     .trend-dot.neutral {

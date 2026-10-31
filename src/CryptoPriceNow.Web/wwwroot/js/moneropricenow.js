@@ -579,7 +579,10 @@
         // Center market price
         if (s.midPrice != null) {
             first ? animateCountUp(heroMidEl, s.midPrice) : (heroMidEl.textContent = fmt(s.midPrice));
-            heroMidSub.textContent = `avg of ${s.priceCount} rates \u00b7 ${s.rows.length} exchanges`;
+            // Cash gap between the average buy and sell price, in this pair's own currency.
+            const gap = (s.avgBuyVal != null && s.avgSellVal != null) ? s.avgBuyVal - s.avgSellVal : null;
+            heroMidSub.textContent = `avg of ${s.priceCount} rates \u00b7 ${s.rows.length} exchanges` +
+                (gap != null && gap > 0 ? ` \u00b7 buy/sell gap ${fmt(gap)}` : '');
         } else {
             heroMidEl.textContent = '--';
             heroMidSub.textContent = 'No data';

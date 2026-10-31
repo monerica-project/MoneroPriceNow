@@ -342,6 +342,7 @@ public sealed class PriceService : IPriceService
         "anonchange", // partner /price supports rateType=fixed (client maps query.Fixed → fixed)
         "mistex",   // partner/rates supports rate_type=fixed (client maps query.Fixed → fixed)
         "betkarma", // fixed-rate only (its estimate is always a fixed quote)
+        "alchimex", // fixed-rate only (rate is fixed when a batch is created)
     };
 
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);
@@ -631,6 +632,7 @@ public sealed class PriceService : IPriceService
             ["sageswap"]    = ["USDT", "BTC", "ETH"], // BestChange feed has XMR↔BTC/ETH rows
             ["secureshift"] = ["USDT"],
             ["stereoswap"]  = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH
+            ["alchimex"]    = ["USDT", "BTC", "ETH"], // USDT-TRX, buys fall back to USDT on Ethereum
             ["swapgate"]    = ["USDT", "BTC", "ETH"], // client resolves any pair via instruments; two-way XMR↔BTC/ETH
             ["godex"]       = ["USDT", "BTC"], // BTC two-way; ETH is sell-only on GoDex (ETH→XMR unavailable)
             ["octoswap"]    = ["USDT", "BTC", "ETH"], // client resolves any pair; two-way XMR↔BTC/ETH

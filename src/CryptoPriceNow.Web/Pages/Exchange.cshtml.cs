@@ -6,6 +6,7 @@ using ExchangeServices.Abstractions;
 using ExchangeServices.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
 
 namespace CryptoPriceNow.Pages;
 
@@ -21,11 +22,20 @@ public sealed class ExchangeModel : PageModel
     private readonly ExchangeDirectoryService _directory;
     private readonly IEnumerable<IExchangePriceApi> _apis;
 
-    public ExchangeModel(IPriceService prices, ExchangeDirectoryService directory, IEnumerable<IExchangePriceApi> apis)
+    public ExchangeModel(
+        IPriceService prices,
+        ExchangeDirectoryService directory,
+        IEnumerable<IExchangePriceApi> apis,
+        IOptions<PriceServiceOptions> priceOptions)
     {
         _prices = prices;
         _directory = directory;
-        _apis = apis;
+
+        // Exchanges removed via PriceService:ExcludedExchanges get no page at all (404),
+        // not even the filler profile.
+        var excluded = new HashSet<string>(
+            priceOptions.Value.ExcludedExchanges ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        _apis = apis.Where(a => !excluded.Contains(a.ExchangeKey)).ToList();
     }
 
     public Exchange Exchange { get; private set; } = default!;
