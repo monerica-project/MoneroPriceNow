@@ -68,7 +68,12 @@ public sealed class SwapQuoteService
         IHttpClientFactory httpFactory,
         IConfiguration config)
     {
-        this.priceApis = priceApis.ToList();
+        // Exchanges removed via PriceService:ExcludedExchanges (scams, broken partners) must not
+        // show up in live swap quotes either, not just on the price board.
+        var excluded = new HashSet<string>(
+            config.GetSection("PriceService:ExcludedExchanges").Get<string[]>() ?? Array.Empty<string>(),
+            StringComparer.OrdinalIgnoreCase);
+        this.priceApis = priceApis.Where(a => !excluded.Contains(a.ExchangeKey)).ToList();
         this.currencyApis = currencyApis.ToList();
         this.cache = cache;
         this.httpFactory = httpFactory;
