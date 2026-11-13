@@ -249,6 +249,8 @@ server {
     listen 80;
     listen [::]:80;
 $SERVER_NAME_LINE
+    # Security headers (HSTS/nosniff/XFO/Referrer-Policy); locations with add_header must include it too.
+    include /etc/nginx/snippets/security-headers.conf;
 
     location /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -257,6 +259,7 @@ $SERVER_NAME_LINE
     client_max_body_size 64M;
 
     location / {
+        include /etc/nginx/snippets/security-headers.conf;
 $ONION_HEADER
         # When the app is down (e.g. during a deploy restart) serve a friendly
         # "updating" page instead of a raw 502/503/504.
@@ -277,6 +280,7 @@ $ONION_HEADER
 
     # Maintenance splash shown by error_page above while the backend is restarting.
     location @maintenance {
+        include /etc/nginx/snippets/security-headers.conf;
         root /var/www/$APP_NAME-maintenance;
         rewrite ^.*\$ /maintenance.html break;
         add_header Retry-After 15 always;
