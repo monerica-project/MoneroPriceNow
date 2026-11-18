@@ -121,7 +121,11 @@ public sealed class SwapQuoteService
             yield break; // only the assets the swap page offers
         }
 
-        var cacheKey = string.Create(CultureInfo.InvariantCulture, $"swapq:{fromTicker}:{toTicker}:{amount}:{fixedRate}");
+        // The cache key uses the amount rounded to 3 significant digits, so tiny changes to the
+        // amount can't force a fresh round of calls to every exchange each time.
+        var keyAmount = RoundToThreeDigits(amount);
+
+        var cacheKey = string.Create(CultureInfo.InvariantCulture, $"swapq:{fromTicker}:{toTicker}:{keyAmount}:{fixedRate}");
         if (this.cache.TryGetValue(cacheKey, out List<SwapQuoteRow>? cachedRows) && cachedRows is not null)
         {
             foreach (var cachedRow in cachedRows)
@@ -414,5 +418,17 @@ public sealed class SwapQuoteService
         {
             sem.Release();
         }
+    }
+
+    private static decimal RoundToThreeDigits(decimal value)
+    {
+        if (value <= 0)
+        {
+            return 0;
+        }
+
+        var magnitude = (int)Math.Floor(Math.Log10((double)value));
+        var step = (decimal)Math.Pow(10, magnitude - 2);
+        return Math.Round(value / step) * step;
     }
 }

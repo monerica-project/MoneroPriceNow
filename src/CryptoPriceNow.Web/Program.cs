@@ -101,7 +101,8 @@ app.Use(async (context, next) =>
         && !System.IO.Path.HasExtension(path)
         && path.Any(char.IsUpper))
     {
-        context.Response.Redirect(path.ToLowerInvariant() + context.Request.QueryString, permanent: true);
+        // Always a single leading slash: "//other-site.example/A" must not become a redirect to another site.
+        context.Response.Redirect("/" + path.ToLowerInvariant().TrimStart('/', '\\') + context.Request.QueryString, permanent: true);
         return;
     }
 
