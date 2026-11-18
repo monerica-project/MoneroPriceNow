@@ -258,6 +258,25 @@ $SERVER_NAME_LINE
 
     client_max_body_size 64M;
 
+    # Embeddable price card (see /widget). Other sites may frame it, so X-Frame-Options is not
+    # sent here; the other shared security headers are repeated because a location with its own
+    # add_header does not inherit them.
+    location /embed/ {
+        proxy_hide_header Strict-Transport-Security;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header Referrer-Policy;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        proxy_pass         http://127.0.0.1:$APP_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+    }
+
     location / {
         include /etc/nginx/snippets/security-headers.conf;
 $ONION_HEADER

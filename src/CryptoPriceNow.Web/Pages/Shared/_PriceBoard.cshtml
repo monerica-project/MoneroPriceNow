@@ -346,6 +346,20 @@
     </section>
 }
 
+@{
+    var swapQuote = Model.QuoteLabel.ToLowerInvariant();
+}
+<section class="seo-text" style="max-width:820px;margin:8px auto 8px;padding:0 16px;font-size:.92rem;line-height:1.6;color:var(--text-muted,#8a7a6a);">
+    <p style="margin:0;">
+        Ready to swap? <a href="https://swapraven.com/swap/xmr-to-@swapQuote" rel="noopener">Compare XMR to @Model.QuoteLabel swap rates on SwapRaven</a>
+        or <a href="https://swapraven.com/swap/@(swapQuote)-to-xmr" rel="noopener">@Model.QuoteLabel to XMR</a>.
+        @if (Model.IsUsd)
+        {
+            <text>Converters: <a href="/convert/xmr-to-usd">XMR to USD</a>, <a href="/convert/xmr-to-eur">XMR to EUR</a>, <a href="/convert/xmr-to-gbp">XMR to GBP</a>. See also the <a href="/history">Monero price history</a>.</text>
+        }
+    </p>
+</section>
+
 <script>
     // Rate view for this page (float default, or fixed on /fixed pages) — read by the table
     // filter in moneropricenow.js and the history fetch in pricechart.js.

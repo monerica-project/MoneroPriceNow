@@ -1,0 +1,106 @@
+@page "/convert/xmr-to-{fiat}"
+@model CryptoPriceNow.Pages.ConvertModel
+@using System.Globalization
+@using CryptoPriceNow.Web.Support
+@{
+    var inv = CultureInfo.InvariantCulture;
+    var f = Model.Fiat;
+    string Money(decimal v) => f.Symbol + v.ToString("N" + f.Decimals, inv);
+    string Xmr(decimal v) => v.ToString(v < 1m ? "0.######" : "N4", inv);
+    var p = Model.PricePerXmr;
+    ViewData["Title"] = p is decimal tp
+        ? $"XMR to {f.Code}: 1 Monero = {Money(tp)} — Live Converter"
+        : $"XMR to {f.Code}: Monero to {f.Name} Converter";
+    ViewData["Description"] = $"Convert Monero (XMR) to {f.Plural} at the live price, with a table of common amounts in both directions. Updated from real exchange prices.";
+}
+
+<style>
+    .cv-page { max-width: 820px; margin: 2.5rem auto 4rem; padding: 0 1.25rem; font-family: var(--sans); color: var(--text); }
+    .cv-page h1 { font-family: var(--mono); font-size: 1.5rem; margin-bottom: .4rem; }
+    .cv-page h2 { font-family: var(--mono); font-size: 1.1rem; margin: 2rem 0 .7rem; }
+    .cv-lead { color: var(--text-muted); margin-bottom: 1.4rem; }
+    .cv-big { font-family: var(--mono); font-size: clamp(2rem, 7vw, 3.4rem); font-weight: 700; color: var(--xmr-orange2); line-height: 1.15; word-break: break-word; }
+    .cv-form { display: flex; gap: .6rem; flex-wrap: wrap; margin: 1.2rem 0 .4rem; }
+    .cv-form input { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: .55rem .7rem; font-family: var(--mono); font-size: 1rem; width: 11rem; }
+    .cv-form button { background: var(--xmr-orange2); color: #111; border: 0; border-radius: 8px; padding: .55rem 1rem; font-weight: 700; cursor: pointer; }
+    .cv-table { width: 100%; border-collapse: collapse; font-family: var(--mono); }
+    .cv-table th, .cv-table td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); }
+    .cv-table th { color: var(--text-muted); font-weight: 600; font-size: .85rem; }
+    .cv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+    .cv-note { color: var(--text-muted); font-size: .88rem; line-height: 1.7; margin-top: 1rem; }
+    .cv-links { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .cv-links a, .cv-page p a { color: var(--xmr-orange2); text-decoration: none; }
+    .cv-links a { border: 1px solid var(--border); border-radius: 999px; padding: .3rem .7rem; font-size: .9rem; }
+</style>
+
+<div class="cv-page">
+    <h1>XMR to @f.Code: Convert Monero to @f.Plural</h1>
+    @if (p is decimal price)
+    {
+        <p class="cv-lead">@Xmr(Model.Amount) XMR is worth</p>
+        <div class="cv-big">@Money(Model.Amount * price)</div>
+        <p class="cv-lead">at @Money(price) per XMR</p>
+
+        <form class="cv-form" method="get">
+            <input type="text" inputmode="decimal" name="amount" value="@Model.Amount.ToString("0.########", inv)" aria-label="Amount of XMR" />
+            <button type="submit">Convert XMR to @f.Code</button>
+        </form>
+
+        <div class="cv-grid">
+            <div>
+                <h2>XMR to @f.Code</h2>
+                <table class="cv-table">
+                    <thead><tr><th>Monero</th><th>@f.Name</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in CryptoPriceNow.Pages.ConvertModel.XmrAmounts)
+                        {
+                            <tr><td>@Xmr(a) XMR</td><td>@Money(a * price)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div>
+                <h2>@f.Code to XMR</h2>
+                <table class="cv-table">
+                    <thead><tr><th>@f.Name</th><th>Monero</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in CryptoPriceNow.Pages.ConvertModel.FiatAmounts)
+                        {
+                            <tr><td>@Money(a)</td><td>@((a / price).ToString("0.######", inv)) XMR</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <p class="cv-note">
+            The Monero price is the live mid-market XMR/USDT price across the exchanges on our <a href="/">price board</a>, treated as US dollars.
+            @if (Model.FxDate is DateOnly d)
+            {
+                <text>Dollars are converted to @f.Plural with the European Central Bank reference rate of @d.ToString("MMMM d, yyyy", inv).</text>
+            }
+            The amount you actually receive depends on the exchange you use and its fees.
+        </p>
+    }
+    else
+    {
+        <p class="cv-lead">The live price is not available right now. Please try again in a minute, or see the <a href="/">price board</a>.</p>
+    }
+
+    <h2>Other currencies</h2>
+    <p class="cv-links">
+        @foreach (var other in FiatCatalog.All.Where(o => o.Code != f.Code))
+        {
+            <a href="/convert/xmr-to-@other.Slug">XMR to @other.Code</a>
+        }
+    </p>
+
+    <h2>More</h2>
+    <p class="cv-links">
+        <a href="/">Live Monero price</a>
+        <a href="/history">Monero price history</a>
+        <a href="/xmr-btc">XMR to BTC</a>
+        <a href="/xmr-eth">XMR to ETH</a>
+        <a href="https://swapraven.com/swap/xmr-to-usdt" rel="noopener">Swap XMR at the best rate</a>
+    </p>
+</div>

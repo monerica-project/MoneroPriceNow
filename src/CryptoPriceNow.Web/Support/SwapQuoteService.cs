@@ -52,6 +52,31 @@ public sealed class SwapQuoteService
     private static readonly SemaphoreSlim FanOutGate = new(3, 3);
     private static readonly TimeSpan FanOutWait = TimeSpan.FromSeconds(15);
 
+    // The concurrency gate above limits how many fan-outs run at once, not how many start, so a
+    // rolling per-minute budget caps the total (configurable as Swap:FanOutsPerMinute).
+    public const int DefaultFanOutsPerMinute = 20;
+    private readonly int fanOutsPerMinute;
+    private readonly Queue<DateTime> fanOutStarts = new();
+    private readonly object startLock = new();
+    private readonly Dictionary<string, SharedFanOut> inflight = new(StringComparer.Ordinal);
+
+    /// <summary>Time source for the budget (replaceable in tests).</summary>
+    internal Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
+
+    // Rough per-asset amount range, about $10 to $1 million at recent prices. Amounts outside it
+    // are quoted at the nearest edge (the rate is still applied to the exact amount asked).
+    private static readonly Dictionary<string, (decimal Min, decimal Max)> AmountRange = new(StringComparer.Ordinal)
+    {
+        ["xmr"] = (0.02m, 5_000m),
+        ["btc"] = (0.0001m, 20m),
+        ["eth"] = (0.003m, 400m),
+        ["usdt"] = (10m, 1_000_000m),
+    };
+
+    // Steps inside each power of ten. About ten per decade keeps the snapped amount within roughly
+    // 12% of what was typed, so the per-unit rate stays representative.
+    private static readonly decimal[] Steps = { 1m, 1.25m, 1.5m, 2m, 2.5m, 3m, 4m, 5m, 6m, 8m, 10m };
+
     // Exchanges whose client returns a genuine fixed-rate quote when PriceQuery.Fixed is set. In
     // fixed mode we only query these (others would just echo their float rate).
     private static readonly HashSet<string> FixedCapableKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -78,6 +103,40 @@ public sealed class SwapQuoteService
         this.cache = cache;
         this.httpFactory = httpFactory;
         this.config = config;
+        this.fanOutsPerMinute = Math.Max(1, config.GetValue("Swap:FanOutsPerMinute", DefaultFanOutsPerMinute));
+    }
+
+    /// <summary>
+    /// The amount exchanges are actually asked about: clamped into the asset's sensible range,
+    /// then snapped to the nearest step (1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8 × a power of ten).
+    /// </summary>
+    public static decimal SnapAmount(string fromTicker, decimal amount)
+    {
+        var (min, max) = AmountRange.TryGetValue((fromTicker ?? string.Empty).ToLowerInvariant(), out var r)
+            ? r
+            : (0.0001m, 1_000_000m);
+        var clamped = Math.Clamp(amount, min, max);
+
+        var magnitude = (int)Math.Floor(Math.Log10((double)clamped));
+        var scale = (decimal)Math.Pow(10, magnitude);
+        var mantissa = clamped / scale;
+
+        // Nearest step in ratio terms (log distance), so 1.1 snaps to 1 and 7.1 snaps to 8.
+        var best = Steps[0];
+        var bestDist = double.MaxValue;
+        foreach (var step in Steps)
+        {
+            var dist = Math.Abs(Math.Log((double)(mantissa / step)));
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best = step;
+            }
+        }
+
+        var snapped = best * scale;
+        // Snapping must not step back outside the range.
+        return Math.Clamp(snapped, min, max);
     }
 
     public int ExchangeCount => this.priceApis.Count;
@@ -94,56 +153,120 @@ public sealed class SwapQuoteService
     }
 
     /// <summary>
-    /// Streams each exchange's quote for <paramref name="fromTicker"/> → <paramref name="toTicker"/>
-    /// (one of which must be XMR) at the given amount, fastest-first, already enriched with sponsor
-    /// status + links. A single failing/slow exchange never blocks the rest.
+    /// Starts (or joins) a quote run for <paramref name="fromTicker"/> → <paramref name="toTicker"/>
+    /// (one of which must be XMR). Returns null for an invalid request. The returned session reads
+    /// each exchange's quote, fastest-first, already enriched with sponsor status + links, with the
+    /// amount received worked out for the exact amount asked. When the per-minute budget of
+    /// fresh fan-outs is used up the session is marked <see cref="SwapQuoteSession.Busy"/> and
+    /// returns no rows, so the page can say "busy, try again in a minute".
     /// </summary>
-    public async IAsyncEnumerable<SwapQuoteRow> GetQuotesStream(
-        string fromTicker, string toTicker, decimal amount, bool fixedRate = false,
-        [EnumeratorCancellation] CancellationToken ct = default)
+    public SwapQuoteSession? Start(string fromTicker, string toTicker, decimal amount, bool fixedRate = false)
     {
         fromTicker = (fromTicker ?? string.Empty).Trim().ToLowerInvariant();
         toTicker = (toTicker ?? string.Empty).Trim().ToLowerInvariant();
         if (amount <= 0 || fromTicker.Length == 0 || toTicker.Length == 0 || fromTicker == toTicker)
         {
-            yield break;
+            return null;
         }
 
         var sellingXmr = fromTicker == "xmr";
         var asset = sellingXmr ? toTicker : fromTicker;
         if (asset == "xmr" || (!sellingXmr && toTicker != "xmr"))
         {
-            yield break; // exactly one side must be XMR
+            return null; // exactly one side must be XMR
         }
 
         if (!SwapAssets.Contains(asset))
         {
-            yield break; // only the assets the swap page offers
+            return null; // only the assets the swap page offers
         }
 
-        // The cache key uses the amount rounded to 3 significant digits, so tiny changes to the
-        // amount can't force a fresh round of calls to every exchange each time.
-        var keyAmount = RoundToThreeDigits(amount);
+        // Exchanges are asked about a nearby "step" amount instead of the exact one, and the step
+        // is kept inside a sensible range. That keeps the number of different requests (and so
+        // the number of fan-outs anyone can force) small; each exchange's per-unit rate is then
+        // applied to the exact amount the visitor typed.
+        var quoteAmount = SnapAmount(fromTicker, amount);
+        var cacheKey = string.Create(CultureInfo.InvariantCulture, $"swapq:{fromTicker}:{toTicker}:{quoteAmount}:{fixedRate}");
 
-        var cacheKey = string.Create(CultureInfo.InvariantCulture, $"swapq:{fromTicker}:{toTicker}:{keyAmount}:{fixedRate}");
-        if (this.cache.TryGetValue(cacheKey, out List<SwapQuoteRow>? cachedRows) && cachedRows is not null)
+        SharedFanOut run;
+        lock (this.startLock)
         {
-            foreach (var cachedRow in cachedRows)
+            if (this.cache.TryGetValue(cacheKey, out SharedFanOut? cached) && cached is not null)
             {
-                yield return cachedRow;
+                run = cached;
             }
+            else if (this.inflight.TryGetValue(cacheKey, out var running))
+            {
+                run = running; // someone already asked for this; share their run
+            }
+            else
+            {
+                if (!TakeFanOutSlot())
+                {
+                    return new SwapQuoteSession(null, amount, sellingXmr, busy: true);
+                }
 
+                run = new SharedFanOut();
+                this.inflight[cacheKey] = run;
+
+                // Runs to the end on its own, with no link to the visitor's connection, so a client
+                // that disconnects early still leaves a cached result instead of a wasted fan-out.
+                _ = Task.Run(() => RunFanOutAsync(run, cacheKey, fromTicker, asset, quoteAmount, sellingXmr, fixedRate));
+            }
+        }
+
+        return new SwapQuoteSession(run, amount, sellingXmr, busy: false);
+    }
+
+    /// <summary>Convenience wrapper over <see cref="Start"/> for callers that only need the rows.</summary>
+    public async IAsyncEnumerable<SwapQuoteRow> GetQuotesStream(
+        string fromTicker, string toTicker, decimal amount, bool fixedRate = false,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var session = Start(fromTicker, toTicker, amount, fixedRate);
+        if (session is null)
+        {
             yield break;
         }
 
-        if (!await FanOutGate.WaitAsync(FanOutWait, ct))
+        await foreach (var row in session.ReadAsync(ct))
         {
-            yield break; // too many live quote requests right now; the page shows "no quotes"
+            yield return row;
+        }
+    }
+
+    // Rolling budget of fresh (uncached, not shared) fan-outs per minute, site-wide.
+    private bool TakeFanOutSlot()
+    {
+        var now = this.Clock();
+        while (this.fanOutStarts.Count > 0 && now - this.fanOutStarts.Peek() >= TimeSpan.FromMinutes(1))
+        {
+            this.fanOutStarts.Dequeue();
         }
 
-        var collected = new List<SwapQuoteRow>();
+        if (this.fanOutStarts.Count >= this.fanOutsPerMinute)
+        {
+            return false;
+        }
+
+        this.fanOutStarts.Enqueue(now);
+        return true;
+    }
+
+    private async Task RunFanOutAsync(
+        SharedFanOut run, string cacheKey, string fromTicker, string asset, decimal amount, bool sellingXmr, bool fixedRate)
+    {
+        var gateTaken = false;
+        var completed = false;
         try
         {
+            gateTaken = await FanOutGate.WaitAsync(FanOutWait);
+            if (!gateTaken)
+            {
+                run.MarkBusy(); // too many live quote runs at once; the page says "busy"
+                return;
+            }
+
             // Parse the pair the SAME way the board does so each client receives the ticker + network
             // it needs (e.g. "USDTTRC" → ticker USDT on Tron) — otherwise ticker-mapping clients (like
             // xmr2cex) can't resolve the asset and silently return nothing.
@@ -151,10 +274,10 @@ public sealed class SwapQuoteService
             var quoteRef = CryptoPriceNow.Services.PriceService.ParseAssetPublic(
                 asset == "usdt" ? "USDTTRC" : asset.ToUpperInvariant());
 
-            var sponsors = await GetSponsorsAsync(ct);
+            var sponsors = await GetSponsorsAsync(CancellationToken.None);
 
             var tasks = this.priceApis
-                .Select(api => FetchOneAsync(api, baseRef, quoteRef, amount, sellingXmr, fixedRate, sponsors, ct))
+                .Select(api => FetchOneAsync(api, baseRef, quoteRef, amount, sellingXmr, fixedRate, sponsors, CancellationToken.None))
                 .ToList();
 
             while (tasks.Count > 0)
@@ -169,22 +292,39 @@ public sealed class SwapQuoteService
                 }
                 catch
                 {
-                    // one exchange failing must not stop the stream
+                    // one exchange failing must not stop the run
                 }
 
                 if (row is not null && row.Receive > 0)
                 {
-                    collected.Add(row);
-                    yield return row;
+                    run.Add(row);
                 }
             }
 
-            // Only a complete run is shared (a client that disconnected mid-stream never caches a partial list).
-            this.cache.Set(cacheKey, collected, QuoteCacheTtl);
+            completed = true;
+        }
+        catch
+        {
+            // Unexpected failure: finish the run with whatever arrived, but do not cache it.
         }
         finally
         {
-            FanOutGate.Release();
+            if (gateTaken)
+            {
+                FanOutGate.Release();
+            }
+
+            lock (this.startLock)
+            {
+                if (completed)
+                {
+                    this.cache.Set(cacheKey, run, QuoteCacheTtl);
+                }
+
+                this.inflight.Remove(cacheKey);
+            }
+
+            run.Complete();
         }
     }
 
@@ -231,7 +371,7 @@ public sealed class SwapQuoteService
 
             var nk = NormName(api.SiteName);
             var isSponsor = sponsors.TryGetValue(nk, out var sponsorLink) && !string.IsNullOrWhiteSpace(sponsorLink);
-            var outHref = isSponsor ? sponsorLink : api.SiteUrl;
+            var outHref = isSponsor ? sponsorLink : (IsWebLink(api.SiteUrl) ? api.SiteUrl : null);
             var rateType = fixedRate ? RateTypes.Fixed : ((api as IRateType)?.RateType ?? RateTypes.Float);
 
             return new SwapQuoteRow(
@@ -295,9 +435,11 @@ public sealed class SwapQuoteService
                             active = exp > DateTime.UtcNow;
                         }
 
-                        if (active && !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(link))
+                        // Only plain web links: the feed is outside this site's control, and a
+                        // javascript: or data: link would run script when a visitor clicks "Swap".
+                        if (active && !string.IsNullOrWhiteSpace(name) && IsWebLink(link))
                         {
-                            map[NormName(name)] = link!;
+                            map[NormName(name)] = link!.Trim();
                         }
                     }
                 }
@@ -317,6 +459,11 @@ public sealed class SwapQuoteService
             this.sponsorLock.Release();
         }
     }
+
+    internal static bool IsWebLink(string? link)
+        => !string.IsNullOrWhiteSpace(link)
+           && Uri.TryCreate(link.Trim(), UriKind.Absolute, out var u)
+           && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp);
 
     private static string NormName(string? s)
         => new string((s ?? string.Empty).ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
@@ -419,16 +566,120 @@ public sealed class SwapQuoteService
             sem.Release();
         }
     }
+}
 
-    private static decimal RoundToThreeDigits(decimal value)
+/// <summary>
+/// One fan-out to every exchange, shared by everyone who asks for the same quote while it runs
+/// and kept briefly in the cache once finished. Rows are appended as exchanges answer; readers
+/// wait for new rows without holding up the run.
+/// </summary>
+internal sealed class SharedFanOut
+{
+    private readonly object gate = new();
+    private readonly List<SwapQuoteRow> rows = new();
+    private TaskCompletionSource changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private bool done;
+
+    /// <summary>True when the run could not start because too many were already running.</summary>
+    public bool Busy { get; private set; }
+
+    public void Add(SwapQuoteRow row)
     {
-        if (value <= 0)
+        TaskCompletionSource signal;
+        lock (this.gate)
         {
-            return 0;
+            this.rows.Add(row);
+            signal = this.changed;
+            this.changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
-        var magnitude = (int)Math.Floor(Math.Log10((double)value));
-        var step = (decimal)Math.Pow(10, magnitude - 2);
-        return Math.Round(value / step) * step;
+        signal.TrySetResult();
+    }
+
+    public void MarkBusy()
+    {
+        lock (this.gate)
+        {
+            this.Busy = true;
+        }
+    }
+
+    public void Complete()
+    {
+        TaskCompletionSource signal;
+        lock (this.gate)
+        {
+            this.done = true;
+            signal = this.changed;
+        }
+
+        signal.TrySetResult();
+    }
+
+    /// <summary>Rows from <paramref name="from"/> on, whether the run has finished, and a task that
+    /// completes when more arrive.</summary>
+    public (List<SwapQuoteRow> Rows, bool Done, Task Next) Read(int from)
+    {
+        lock (this.gate)
+        {
+            var slice = from < this.rows.Count ? this.rows.GetRange(from, this.rows.Count - from) : new List<SwapQuoteRow>();
+            return (slice, this.done, this.changed.Task);
+        }
+    }
+}
+
+/// <summary>A visitor's view of a (possibly shared) quote run, for one exact amount.</summary>
+public sealed class SwapQuoteSession
+{
+    private readonly SharedFanOut? run;
+    private readonly decimal amount;
+    private readonly bool sellingXmr;
+    private readonly bool startBusy;
+
+    internal SwapQuoteSession(SharedFanOut? run, decimal amount, bool sellingXmr, bool busy)
+    {
+        this.run = run;
+        this.amount = amount;
+        this.sellingXmr = sellingXmr;
+        this.startBusy = busy;
+    }
+
+    /// <summary>True when the server is too busy to fetch fresh quotes; try again in a minute.
+    /// Final once <see cref="ReadAsync"/> has finished.</summary>
+    public bool Busy => this.startBusy || (this.run?.Busy ?? false);
+
+    /// <summary>Each exchange's row as it arrives, with the amount received for the exact amount
+    /// asked (the shared run quoted a nearby step amount; its per-unit rate is applied here).
+    /// Stopping early (a disconnect) only stops this reader, never the shared run.</summary>
+    public async IAsyncEnumerable<SwapQuoteRow> ReadAsync([EnumeratorCancellation] CancellationToken ct = default)
+    {
+        if (this.run is null)
+        {
+            yield break;
+        }
+
+        var next = 0;
+        while (true)
+        {
+            var (rows, done, more) = this.run.Read(next);
+            next += rows.Count;
+            foreach (var row in rows)
+            {
+                if (row.PerXmr <= 0)
+                {
+                    continue;
+                }
+
+                var receive = this.sellingXmr ? this.amount * row.PerXmr : this.amount / row.PerXmr;
+                yield return row with { Receive = receive };
+            }
+
+            if (done)
+            {
+                yield break;
+            }
+
+            await more.WaitAsync(ct);
+        }
     }
 }

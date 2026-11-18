@@ -160,6 +160,13 @@
                 </table>
             </div>
         }
+        else if (Model.Busy)
+        {
+            <div class="swap-prompt">
+                <p><strong>We are fetching a lot of quotes right now.</strong></p>
+                <p>Please try again in a minute.</p>
+            </div>
+        }
         else
         {
             <div class="swap-prompt">
@@ -189,6 +196,10 @@
             </table>
         </div>
         <div class="swap-streaming" id="swapStreaming"><span class="swap-spinner" aria-hidden="true"></span> Fetching live quotes from exchanges…</div>
+        <div class="swap-prompt" id="swapStreamBusy" hidden>
+            <p><strong>We are fetching a lot of quotes right now.</strong></p>
+            <p>Please try again in a minute.</p>
+        </div>
         <div class="swap-prompt" id="swapStreamEmpty" hidden>
             <p><strong>No exchange will swap @Fmt(Model.Amount, Model.SellingXmr ? 8 : Model.Pair.Decimals) @Model.FromUpper right now.</strong></p>
             <p>The amount is likely below the exchanges' minimums — try a larger amount, a different asset, or the other direction.</p>
@@ -227,6 +238,8 @@
             var body = document.getElementById('swapStreamBody');
             var spin = document.getElementById('swapStreaming');
             var empty = document.getElementById('swapStreamEmpty');
+            var busyBox = document.getElementById('swapStreamBusy');
+            var busy = false;
 
             var from = stream.getAttribute('data-from');
             var to = stream.getAttribute('data-to');
@@ -237,7 +250,14 @@
             var asset = stream.getAttribute('data-asset') || '';
 
             function norm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-            function esc(s) { var d = document.createElement('div'); d.textContent = (s == null ? '' : s); return d.innerHTML; }
+            // Escapes quotes too, because some values go inside href="..." and title="..." attributes.
+            function esc(s) {
+                return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            }
+            // Only plain web links become clickable; anything else (javascript:, data:) is dropped.
+            function safeHref(u) { return /^https?:\/\//i.test(String(u || '')) ? u : null; }
             function fmt(x, d) { return Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
 
             var rows = {};
@@ -262,7 +282,8 @@
                     var rel = q.sponsor ? 'noopener' : 'nofollow noopener sponsored';
                     var name = esc(q.name);
                     var priv = p ? '<span class="privacy-badge privacy-' + p + '" title="Privacy grade ' + p + '">' + p + '</span>' : '<span class="swap-muted">—</span>';
-                    var out = q.outHref ? '<a class="swap-out" href="' + esc(q.outHref) + '" target="_blank" rel="' + rel + '">Swap ↗</a>' : '';
+                    var href = safeHref(q.outHref);
+                    var out = href ? '<a class="swap-out" href="' + esc(href) + '" target="_blank" rel="' + rel + '">Swap ↗</a>' : '';
                     var badge = q.sponsor ? ' <span class="swap-badge-sponsor">★ SPONSOR</span>' : '';
                     html += '<tr class="' + cls.trim() + '">'
                         + '<td><a class="swap-ex-name" href="' + esc(q.exchangeUrl) + '" title="' + name + ' prices &amp; chart">' + name + '</a>' + badge + '</td>'
@@ -277,6 +298,7 @@
             }
 
             function handle(q) {
+                if (q && q.busy) { busy = true; return; }
                 if (!q || !(q.receive > 0)) { return; }
                 var k = norm(q.name);
                 if (!rows[k] || q.receive > rows[k].receive) { rows[k] = q; render(); }
@@ -284,7 +306,10 @@
 
             function done() {
                 if (spin) { spin.hidden = true; }
-                if (Object.keys(rows).length === 0 && empty) { empty.hidden = false; }
+                if (Object.keys(rows).length === 0) {
+                    if (busy && busyBox) { busyBox.hidden = false; }
+                    else if (empty) { empty.hidden = false; }
+                }
             }
 
             var url = '/swap/stream?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to)

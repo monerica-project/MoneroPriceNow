@@ -62,6 +62,9 @@ public sealed class SwapModel : PageModel
     /// <summary>Fixed-rate mode (locked at quote time) vs the default floating rate.</summary>
     public bool Fixed { get; private set; }
 
+    /// <summary>True when the server is fetching too many fresh quotes right now (try again in a minute).</summary>
+    public bool Busy { get; private set; }
+
     public IReadOnlyList<SwapQuoteRow> Results { get; private set; } = System.Array.Empty<SwapQuoteRow>();
 
     public int RespondedCount => Results.Count;
@@ -141,7 +144,13 @@ public sealed class SwapModel : PageModel
         //      A rate for 0.00001 BTC is nothing like the rate for 10 BTC, and an amount below an
         //      exchange's minimum simply returns no quote and drops out. ----
         var best = new Dictionary<string, SwapQuoteRow>(System.StringComparer.OrdinalIgnoreCase);
-        await foreach (var q in this.swap.GetQuotesStream(From, To, Amount, Fixed, ct))
+        var session = this.swap.Start(From, To, Amount, Fixed);
+        if (session is null)
+        {
+            return;
+        }
+
+        await foreach (var q in session.ReadAsync(ct))
         {
             var nk = new string(q.SiteName.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
             if (!best.TryGetValue(nk, out var existing) || q.Receive > existing.Receive)
@@ -150,6 +159,7 @@ public sealed class SwapModel : PageModel
             }
         }
 
+        Busy = session.Busy;
         var list = best.Values.ToList();
 
         // Drop nonsensical outliers (a mis-scaled quote): keep quotes within a band around the

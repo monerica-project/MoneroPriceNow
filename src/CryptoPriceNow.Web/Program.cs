@@ -5,12 +5,14 @@ using CryptoPriceNow.Web.Models;
 using CryptoPriceNow.Web.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorPages();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<CryptoPriceNow.Web.Support.FxRateService>();
 
 // Registers exchange clients + options binding
 builder.Services.AddCryptoPriceNowServices(builder.Configuration);
@@ -18,6 +20,7 @@ builder.Services.AddCryptoPriceNowServices(builder.Configuration);
 // Amount-accurate swap quoting for /swap (fans out to each exchange with the real amount).
 builder.Services.AddSingleton<CryptoPriceNow.Web.Support.SwapQuoteService>();
 builder.Services.AddSingleton<CryptoPriceNow.Web.Support.MillionaireService>();
+builder.Services.AddSingleton<CryptoPriceNow.Web.Support.KnownExchangeKeys>();
 
 // Postgres quote store. No-ops (NullPriceQuoteSink) when ConnectionStrings:PriceDb
 // is absent, so the site runs unchanged without a database.
@@ -169,9 +172,14 @@ app.MapGet("/sitemap.xml", async (HttpContext http, CancellationToken ct) =>
     foreach (var info in new[]
         {
             ("/millionaire", "0.6"), ("/network", "0.6"), ("/about", "0.5"),
+            ("/history", "0.7"), ("/widget", "0.5"),
             ("/sponsors", "0.4"), ("/contact", "0.4"), ("/privacy", "0.3"),
         })
         entries.Add((origin + info.Item1, "monthly", info.Item2));
+
+    // One converter page per supported currency (/convert/xmr-to-usd …).
+    foreach (var fiat in CryptoPriceNow.Web.Support.FiatCatalog.All)
+        entries.Add(($"{origin}/convert/xmr-to-{fiat.Slug}", "hourly", "0.8"));
 
     var sb = new System.Text.StringBuilder();
     sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -185,6 +193,39 @@ app.MapGet("/sitemap.xml", async (HttpContext http, CancellationToken ct) =>
           .Append("  </url>\n");
     sb.Append("</urlset>\n");
     return Results.Content(sb.ToString(), "application/xml");
+});
+
+// Embeddable price card and badge for other sites (see /widget). Plain HTML and SVG: no script,
+// no cookie, nothing about the visitor stored. Cached for a minute.
+app.MapGet("/embed/price", async (HttpContext http, CryptoPriceNow.Web.Support.MillionaireService prices, CancellationToken ct) =>
+{
+    var snap = await prices.GetAsync(ct);
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var price = snap.Price is decimal p ? "$" + p.ToString("N2", inv) : "--";
+    var dayAgo = snap.Comparisons.FirstOrDefault(c => c.Days == 1)?.Price;
+    var change = snap.Price is decimal now && dayAgo is decimal then && then > 0m ? (now - then) / then * 100m : (decimal?)null;
+    var changeText = change is decimal c ? c.ToString("+0.00;-0.00", inv) + "% in 24h" : "";
+    var color = change is decimal cc && cc < 0m ? "#ff6b6b" : "#3ddc84";
+    http.Response.Headers["Cache-Control"] = "public, max-age=60";
+    var html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"60\"><meta name=\"robots\" content=\"noindex\"><title>Monero price</title>"
+        + "<style>html,body{margin:0;background:transparent}a{display:block;box-sizing:border-box;width:260px;height:112px;padding:14px 16px;border-radius:12px;background:#15161a;border:1px solid #2a2c33;"
+        + "font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-decoration:none;color:#f2f2f2}.l{font-size:12px;color:#9aa0aa;letter-spacing:.04em}.p{font-size:30px;font-weight:700;color:#ff7a2f;line-height:1.2;margin:4px 0}"
+        + ".c{font-size:12px}.s{font-size:11px;color:#9aa0aa;float:right}</style></head><body>"
+        + $"<a href=\"https://moneropricenow.com/\" target=\"_blank\" rel=\"noopener\"><div class=\"l\">MONERO (XMR)</div><div class=\"p\">{price}</div><div class=\"c\"><span style=\"color:{color}\">{changeText}</span><span class=\"s\">moneropricenow.com</span></div></a>"
+        + "</body></html>";
+    return Results.Content(html, "text/html; charset=utf-8");
+});
+
+app.MapGet("/badge/xmr-usd.svg", async (HttpContext http, CryptoPriceNow.Web.Support.MillionaireService prices, CancellationToken ct) =>
+{
+    var snap = await prices.GetAsync(ct);
+    var price = snap.Price is decimal p ? "$" + p.ToString("N2", System.Globalization.CultureInfo.InvariantCulture) : "--";
+    http.Response.Headers["Cache-Control"] = "public, max-age=60";
+    var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"176\" height=\"28\" role=\"img\" aria-label=\"Monero price " + price + "\">"
+        + "<rect width=\"176\" height=\"28\" rx=\"6\" fill=\"#15161a\"/><rect width=\"84\" height=\"28\" rx=\"6\" fill=\"#ff6600\"/><rect x=\"78\" width=\"6\" height=\"28\" fill=\"#ff6600\"/>"
+        + "<g font-family=\"Verdana,DejaVu Sans,sans-serif\" font-size=\"12\" font-weight=\"bold\"><text x=\"42\" y=\"18\" text-anchor=\"middle\" fill=\"#111\">XMR price</text>"
+        + "<text x=\"130\" y=\"18\" text-anchor=\"middle\" fill=\"#f2f2f2\">" + price + "</text></g></svg>";
+    return Results.Content(svg, "image/svg+xml");
 });
 
 // Public price endpoints accept ONLY the PairCatalog pairs (served from the warm snapshot).
@@ -247,7 +288,13 @@ app.MapGet("/swap/stream", async (
     }
 
     var fixedRate = string.Equals(rate, "fixed", StringComparison.OrdinalIgnoreCase);
-    await foreach (var q in swap.GetQuotesStream(from ?? string.Empty, to ?? string.Empty, amt, fixedRate, ct))
+    var session = swap.Start(from ?? string.Empty, to ?? string.Empty, amt, fixedRate);
+    if (session is null)
+    {
+        return;
+    }
+
+    await foreach (var q in session.ReadAsync(ct))
     {
         var payload = System.Text.Json.JsonSerializer.Serialize(new
         {
@@ -261,6 +308,12 @@ app.MapGet("/swap/stream", async (
         });
         await http.Response.WriteAsync(payload + "\n", ct);
         await http.Response.Body.FlushAsync(ct);
+    }
+
+    // Too many fresh quote runs this minute: tell the page so it can say "try again in a minute".
+    if (session.Busy)
+    {
+        await http.Response.WriteAsync("{\"busy\":true}\n", ct);
     }
 });
 
@@ -317,11 +370,37 @@ app.MapGet("/api/history", async (
     // exchange (raw quotes binned on the fly) instead of the pooled all-exchange rollup.
     var exchangeKey = string.IsNullOrWhiteSpace(exchange) ? null : exchange.Trim();
 
+    // The per-exchange chart bins raw quotes on every call, so only known exchanges are
+    // accepted and each answer is shared for 60 seconds instead of re-running the query.
+    if (exchangeKey is not null)
+    {
+        if (!http.RequestServices.GetRequiredService<CryptoPriceNow.Web.Support.KnownExchangeKeys>().TryGetCanonical(exchangeKey, out var canonicalKey))
+            return Results.BadRequest(new { error = "unknown exchange" });
+        exchangeKey = canonicalKey;
+    }
+
     try
     {
-        var result = exchangeKey is null
-            ? await history.GetHistoryAsync(trackedPair.HistoryPair, range, rt, ct)
-            : await history.GetExchangeHistoryAsync(exchangeKey, trackedPair.HistoryPair, range, rt, ct);
+        CryptoPriceNow.Data.Models.HistoryResult result;
+        if (exchangeKey is null)
+        {
+            result = await history.GetHistoryAsync(trackedPair.HistoryPair, range, rt, ct);
+        }
+        else
+        {
+            // Unknown range strings fall back to the default preset, so normalize before keying
+            // the cache; otherwise random range values would each get their own entry.
+            PriceHistoryService.TryGetPreset(range, out var preset);
+            var memo = http.RequestServices.GetRequiredService<IMemoryCache>();
+            var cacheKey = $"exhist:{exchangeKey}:{trackedPair.HistoryPair}:{preset.Key}:{rt ?? "all"}";
+            if (!memo.TryGetValue(cacheKey, out CryptoPriceNow.Data.Models.HistoryResult? cachedResult) || cachedResult is null)
+            {
+                cachedResult = await history.GetExchangeHistoryAsync(exchangeKey, trackedPair.HistoryPair, preset.Key, rt, ct);
+                memo.Set(cacheKey, cachedResult, TimeSpan.FromSeconds(60));
+            }
+
+            result = cachedResult;
+        }
 
         // Which range presets have enough history behind them to be worth showing?
         // A range is available once data spans at least that far back. The shortest
