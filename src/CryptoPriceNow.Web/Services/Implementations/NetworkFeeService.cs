@@ -176,7 +176,7 @@ public sealed class NetworkFeeService : INetworkFeeService
             {
                 var total = nextBase + priorityTip;
                 var feeWei = total * 21000;
-                decimal eth = (decimal)((double)feeWei / 1e18);
+                decimal eth = ExchangeServices.DecimalConvert.FromDouble((double)feeWei / 1e18);
                 return BuildTier(label, $"{FormatGwei(total)} Gwei", eta,
                     usd is decimal p ? eth * p : (decimal?)null);
             }
@@ -190,8 +190,8 @@ public sealed class NetworkFeeService : INetworkFeeService
 
             // Representative "Normal" sample (median priority).
             var normalTotal = nextBase + tip[1];
-            decimal normalGwei = (decimal)((double)normalTotal / 1e9);
-            decimal normalEth = (decimal)((double)(normalTotal * 21000) / 1e18);
+            decimal normalGwei = ExchangeServices.DecimalConvert.FromDouble((double)normalTotal / 1e9);
+            decimal normalEth = ExchangeServices.DecimalConvert.FromDouble((double)(normalTotal * 21000) / 1e18);
             var sample = new NetworkFeeSample(normalGwei, "Gwei",
                 usd is decimal up ? normalEth * up : (decimal?)null);
 
@@ -216,13 +216,13 @@ public sealed class NetworkFeeService : INetworkFeeService
             var gp = HexToBig(root.Value.GetProperty("result").GetString());
             var usd = await GetUsdAsync("ethereum", ct);
             var feeWei = gp * 21000;
-            decimal eth = (decimal)((double)feeWei / 1e18);
+            decimal eth = ExchangeServices.DecimalConvert.FromDouble((double)feeWei / 1e18);
             var tiers = new[]
             {
                 BuildTier("Current", $"{FormatGwei(gp)} Gwei", "transfer",
                     usd is decimal p ? eth * p : (decimal?)null),
             };
-            var sample = new NetworkFeeSample((decimal)((double)gp / 1e9), "Gwei",
+            var sample = new NetworkFeeSample(ExchangeServices.DecimalConvert.FromDouble((double)gp / 1e9), "Gwei",
                 usd is decimal up ? eth * up : (decimal?)null);
             return new NetworkFee("ethereum", "Ethereum Gas Fee", tiers,
                 "A plain transfer costs 21,000 gas.", DateTimeOffset.UtcNow, sample);

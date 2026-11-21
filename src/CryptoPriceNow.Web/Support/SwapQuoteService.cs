@@ -118,7 +118,7 @@ public sealed class SwapQuoteService
         var clamped = Math.Clamp(amount, min, max);
 
         var magnitude = (int)Math.Floor(Math.Log10((double)clamped));
-        var scale = (decimal)Math.Pow(10, magnitude);
+        var scale = ExchangeServices.DecimalConvert.FromDouble(Math.Pow(10, magnitude));
         var mantissa = clamped / scale;
 
         // Nearest step in ratio terms (log distance), so 1.1 snaps to 1 and 7.1 snaps to 8.

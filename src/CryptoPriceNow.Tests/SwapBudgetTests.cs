@@ -56,7 +56,7 @@ public class SwapBudgetTests
     [InlineData("usdt", 999_999_999, 1_000_000)]
     [InlineData("xmr", 7.1, 8)]
     public void SnapAmount_clamps_and_snaps_to_steps(string from, double amount, double expected)
-        => Assert.Equal((decimal)expected, SwapQuoteService.SnapAmount(from, (decimal)amount));
+        => Assert.Equal(ExchangeServices.DecimalConvert.FromDouble(expected), SwapQuoteService.SnapAmount(from, ExchangeServices.DecimalConvert.FromDouble(amount)));
 
     [Fact]
     public void SnapAmount_gives_few_distinct_keys_across_the_whole_range()
