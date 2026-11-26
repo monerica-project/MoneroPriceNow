@@ -35,6 +35,10 @@
     function fmtLabel(ms, bucketSeconds) {
         const d = new Date(ms);
         const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        if (bucketSeconds >= 86400) {
+            // Daily averages (90d): the bucket starts at 00:00 UTC, so show its UTC date only.
+            return d.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: 'UTC' });
+        }
         if (bucketSeconds >= 3600) {
             const md = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
             return `${md} ${hm}`;
