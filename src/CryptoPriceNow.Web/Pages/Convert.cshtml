@@ -23,10 +23,23 @@
     .cv-form { display: flex; gap: .6rem; flex-wrap: wrap; margin: 1.2rem 0 .4rem; }
     .cv-form input { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: .55rem .7rem; font-family: var(--mono); font-size: 1rem; width: 11rem; }
     .cv-form button { background: var(--xmr-orange2); color: #111; border: 0; border-radius: 8px; padding: .55rem 1rem; font-weight: 700; cursor: pointer; }
-    .cv-table { width: 100%; border-collapse: collapse; font-family: var(--mono); }
-    .cv-table th, .cv-table td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); }
+    .cv-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    .cv-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .cv-table th, .cv-table td { padding: .55rem .75rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .cv-table tr:last-child td { border-bottom: 0; }
+    .cv-table th:first-child, .cv-table td:first-child { text-align: left; }
+    .cv-table th:last-child, .cv-table td:last-child { text-align: right; }
     .cv-table th { color: var(--text-muted); font-weight: 600; font-size: .85rem; }
-    .cv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+    .cv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1.5rem; }
+    .cv-grid > div { min-width: 0; }
+    @@media (max-width: 480px) {
+        .cv-page { margin-top: 1.5rem; padding: 0 1rem; }
+        .cv-page h1 { font-size: 1.25rem; }
+        .cv-table { font-size: .88rem; }
+        .cv-table th, .cv-table td { padding: .5rem .55rem; }
+        .cv-form input { flex: 1 1 8rem; width: auto; min-width: 0; }
+        .cv-form button { flex: 1 1 100%; }
+    }
     .cv-note { color: var(--text-muted); font-size: .88rem; line-height: 1.7; margin-top: 1rem; }
     .cv-links { display: flex; flex-wrap: wrap; gap: .5rem; }
     .cv-links a, .cv-page p a { color: var(--xmr-orange2); text-decoration: none; }
@@ -49,7 +62,7 @@
         <div class="cv-grid">
             <div>
                 <h2>XMR to @f.Code</h2>
-                <table class="cv-table">
+                <div class="cv-table-wrap"><table class="cv-table">
                     <thead><tr><th>Monero</th><th>@f.Name</th></tr></thead>
                     <tbody>
                         @foreach (var a in CryptoPriceNow.Pages.ConvertModel.XmrAmounts)
@@ -57,11 +70,11 @@
                             <tr><td>@Xmr(a) XMR</td><td>@Money(a * price)</td></tr>
                         }
                     </tbody>
-                </table>
+                </table></div>
             </div>
             <div>
                 <h2>@f.Code to XMR</h2>
-                <table class="cv-table">
+                <div class="cv-table-wrap"><table class="cv-table">
                     <thead><tr><th>@f.Name</th><th>Monero</th></tr></thead>
                     <tbody>
                         @foreach (var a in CryptoPriceNow.Pages.ConvertModel.FiatAmounts)
@@ -69,7 +82,7 @@
                             <tr><td>@Money(a)</td><td>@((a / price).ToString("0.######", inv)) XMR</td></tr>
                         }
                     </tbody>
-                </table>
+                </table></div>
             </div>
         </div>
 

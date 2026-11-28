@@ -187,6 +187,8 @@ public sealed class BunnyPricePublisher : BackgroundService
     <tbody>{{rows}}</tbody>
   </table>
 
+  <p class="note"><a href="/swap-rates.json">/swap-rates.json</a>: how far the typical instant-swap quote trails the best one over the last 30 days, per pair and per exchange (floating rates, refreshed every few hours).</p>
+
   <p class="note">Each endpoint returns JSON:</p>
   <pre><code>{
   "pair": "XMR/USDT",

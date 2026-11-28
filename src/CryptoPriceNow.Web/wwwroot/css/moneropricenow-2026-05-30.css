@@ -1670,3 +1670,8 @@ tbody tr.is-sponsor {
 @media (prefers-reduced-motion: reduce) {
     .netfee-bump-up, .netfee-bump-down { animation: none; }
 }
+
+/* Default link color: orange, never browser blue. :where() keeps specificity at zero,
+   so every component rule that styles its own links still wins. */
+:where(a, a:visited) { color: var(--xmr-orange2, var(--xmr-orange, #F26822)); }
+:where(a:hover) { color: var(--xmr-orange, #F26822); }

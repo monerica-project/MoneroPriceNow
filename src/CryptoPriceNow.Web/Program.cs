@@ -42,6 +42,10 @@ builder.Services.AddHostedService<NetworkFeeWarmingService>();
 // hits this web server. No-op unless Bunny:StorageKey is configured (server-side only).
 builder.Services.AddHostedService<BunnyPricePublisher>();
 
+// Publishes swap-rates.json (best rate versus typical rate, per pair and per exchange, last
+// 30 days) to the same public API every few hours. SwapRaven reads it.
+builder.Services.AddHostedService<SwapRateSummaryPublisher>();
+
 var app = builder.Build();
 
 // ── Database migration on startup ────────────────────────────────────────────
@@ -173,7 +177,7 @@ app.MapGet("/sitemap.xml", async (HttpContext http, CancellationToken ct) =>
         {
             ("/millionaire", "0.6"), ("/network", "0.6"), ("/about", "0.5"),
             ("/history", "0.7"), ("/widget", "0.5"),
-            ("/sponsors", "0.4"), ("/contact", "0.4"), ("/privacy", "0.3"),
+            ("/sponsors", "0.4"), ("/listing-requirements", "0.4"), ("/contact", "0.4"), ("/privacy", "0.3"),
         })
         entries.Add((origin + info.Item1, "monthly", info.Item2));
 

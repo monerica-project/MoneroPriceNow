@@ -342,7 +342,6 @@ public sealed class PriceService : IPriceService
         "anonchange", // partner /price supports rateType=fixed (client maps query.Fixed → fixed)
         "mistex",   // partner/rates supports rate_type=fixed (client maps query.Fixed → fixed)
         "betkarma", // fixed-rate only (its estimate is always a fixed quote)
-        "alchimex", // fixed-rate only (rate is fixed when a batch is created)
     };
 
     private static readonly TimeSpan ExchangeTimeout = TimeSpan.FromSeconds(8);

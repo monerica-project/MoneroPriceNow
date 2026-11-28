@@ -1,0 +1,89 @@
+@page "/listing-requirements"
+@model WebApplication1.Pages.ListingRequirementsModel
+@{
+    ViewData["Title"] = "Listing Requirements — MoneroPriceNow";
+    ViewData["Description"] = "What an exchange needs to be listed on MoneroPriceNow: a Monerica listing at least 180 days old, public API documentation and an affiliate program.";
+}
+
+<style>
+    .mpn-page {
+        max-width: 760px;
+        margin: 2.5rem auto 4rem;
+        padding: 0 1.25rem;
+        font-family: var(--sans);
+        color: var(--text);
+    }
+    .mpn-page h1 {
+        font-family: var(--mono);
+        font-size: 1.6rem;
+        letter-spacing: -.01em;
+        margin-bottom: 1.25rem;
+        color: var(--text);
+    }
+    .mpn-page h2 {
+        font-family: var(--mono);
+        font-size: 1.05rem;
+        margin: 2rem 0 .65rem;
+        color: var(--xmr-orange2);
+    }
+    .mpn-page p {
+        line-height: 1.7;
+        margin-bottom: 1rem;
+        color: var(--text);
+    }
+    .mpn-page a {
+        color: var(--xmr-orange2);
+        text-decoration: none;
+        border-bottom: 1px solid rgba(242,104,34,.35);
+    }
+    .mpn-page a:hover { border-bottom-color: var(--xmr-orange2); }
+    .mpn-card {
+        background: var(--surface, #161109);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.25rem 1.4rem;
+        margin: 1.25rem 0;
+    }
+    .mpn-muted { color: var(--text-muted); font-size: .92rem; }
+</style>
+
+<div class="mpn-page">
+    <h1>Listing requirements</h1>
+
+    <p>
+        MoneroPriceNow compares live Monero (XMR) rates from exchanges and swap services.
+        To be added to the price board, a service has to meet all three requirements below.
+    </p>
+
+    <div class="mpn-card">
+        <h2 style="margin-top:0">1. Listed on Monerica for at least 180 days</h2>
+        <p>
+            The service must have a listing on <a href="https://monerica.com" rel="noopener">monerica.com</a>,
+            and that listing must be at least 180 days old. A service that is not on Monerica yet can
+            <a href="https://app.monerica.com/submit" rel="noopener">submit a listing there</a>;
+            the 180 days count from the day the listing is added.
+        </p>
+
+        <h2>2. Public API documentation</h2>
+        <p>
+            Rates on this site are read automatically, so the service needs an API with published
+            documentation that covers getting a quote for a swap to and from Monero.
+        </p>
+
+        <h2>3. An affiliate program</h2>
+        <p style="margin-bottom:0">
+            The service must run an affiliate program that MoneroPriceNow can join.
+        </p>
+    </div>
+
+    <h2>How to apply</h2>
+    <p>
+        If your service meets all three, email
+        <a href="mailto:moneropricenow@monerica.com">moneropricenow@monerica.com</a>
+        with the link to your Monerica listing, your API documentation and your affiliate program.
+    </p>
+    <p class="mpn-muted">
+        Meeting the requirements does not guarantee a listing, and a listed service can be removed,
+        for example if its rates stop loading or its Monerica listing is removed.
+    </p>
+</div>
